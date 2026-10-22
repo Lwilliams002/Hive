@@ -11,7 +11,12 @@ targets:
   Hive:
     type: application
     platform: iOS
-    sources: [Hive]
+    sources:
+      - path: Hive
+        excludes: [Resources/Levels]
+      - path: Hive/Resources/Levels
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: HiveCore
     settings:
