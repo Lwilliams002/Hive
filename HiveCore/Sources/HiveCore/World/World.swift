@@ -1,10 +1,5 @@
 import Foundation
 
-/// Placeholder; Task 5 replaces this with the real upgrade card type.
-public struct UpgradeCard: Equatable {}
-/// Placeholder; Task 5 replaces this with the real nectar meter.
-public struct NectarMeter: Equatable {}
-
 public struct World {
     public private(set) var hive: Hive
     public private(set) var mobs: [Mob] = []
@@ -12,7 +7,7 @@ public struct World {
     public private(set) var director: WaveDirector
     public private(set) var phase: RunPhase = .playing
     public private(set) var time: Double = 0
-    public var nectar = NectarMeter()
+    public private(set) var nectar = NectarMeter()
 
     public static let spawnRadius: Double = 520
 
@@ -84,6 +79,7 @@ public struct World {
         // (6) projectile–mob collisions
         var deadIDs = Set<Int>()
         var spentProjectiles = Set<Int>()
+        var thresholdCrossed = false
         for p in projectiles.indices {
             for m in mobs.indices {
                 let mob = mobs[m]
@@ -97,6 +93,7 @@ public struct World {
                 if mobs[m].hp <= 0 {
                     deadIDs.insert(mob.id)
                     events.append(.mobKilled(id: mob.id, type: mob.type, at: mobs[m].position))
+                    if nectar.add(mob.type.stats.nectar) { thresholdCrossed = true }
                 }
                 projectiles[p].pierceRemaining -= 1
                 if projectiles[p].pierceRemaining < 0 {
@@ -109,6 +106,13 @@ public struct World {
 
         // (7) remove dead mobs
         mobs.removeAll { deadIDs.contains($0.id) }
+
+        // Nectar threshold: pause into card pick, skipping the rest of the tick.
+        if thresholdCrossed {
+            phase = .pickingCards(UpgradeCatalog.draw(count: 3, from: UpgradeCatalog.milestone1, rng: &rng))
+            events.append(.nectarThreshold)
+            return events
+        }
 
         // (8) mob–hive contact
         var contacted = Set<Int>()
@@ -149,6 +153,15 @@ public struct World {
             events.append(.levelCleared)
         }
         return events
+    }
+
+    /// Applies the chosen card and resumes play. No-op outside `.pickingCards`.
+    public mutating func choose(_ card: UpgradeCard) {
+        guard case .pickingCards = phase else { return }
+        var stats = hive.stats
+        stats.apply(card.effect, to: &hive)
+        hive.stats = stats
+        phase = .playing
     }
 
     // MARK: - Helpers
