@@ -3,7 +3,8 @@ import SpriteKit
 final class HUDNode: SKNode {
     private let hpFill = SKSpriteNode(color: Palette.gold, size: CGSize(width: 220, height: 8))
     private let nectarFill = SKSpriteNode(color: Palette.amber, size: CGSize(width: 10, height: 6))
-    private let waveLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let waveLabel = SKLabelNode(fontNamed: Typography.font)
+    private let coinsLabel = SKLabelNode(fontNamed: Typography.font)
     private let hpWidth: CGFloat = 220
     private let nectarWidth: CGFloat
 
@@ -25,12 +26,20 @@ final class HUDNode: SKNode {
         hpFill.zPosition = 1
         addChild(hpFill)
 
-        waveLabel.fontSize = 15
+        waveLabel.fontSize = Typography.body
         waveLabel.fontColor = Palette.gold
         waveLabel.alpha = 0.85
         waveLabel.verticalAlignmentMode = .center
         waveLabel.position = CGPoint(x: 0, y: top - 84)
         addChild(waveLabel)
+
+        // Provisional coins for this run, top-left, level with the HP bar.
+        coinsLabel.fontSize = 14
+        coinsLabel.fontColor = Palette.gold
+        coinsLabel.horizontalAlignmentMode = .left
+        coinsLabel.verticalAlignmentMode = .center
+        coinsLabel.position = CGPoint(x: -viewSize.width / 2 + 20, y: top - 60)
+        addChild(coinsLabel)
 
         let nectarY = bottom + 48
         let nectarTrack = SKSpriteNode(color: Palette.burntOrange, size: CGSize(width: nectarWidth, height: 6))
@@ -60,11 +69,12 @@ final class HUDNode: SKNode {
     required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
 
     func update(hp: Double, maxHP: Double, wave: Int, totalWaves: Int, isBoss: Bool,
-                nectar: Int, nectarThreshold: Int) {
+                nectar: Int, nectarThreshold: Int, coinsPending: Int) {
         let hpFrac = maxHP > 0 ? CGFloat(max(0, min(1, hp / maxHP))) : 0
         hpFill.size.width = hpWidth * hpFrac
         hpFill.color = hpFrac < 0.25 ? Palette.white : Palette.gold
 
+        coinsLabel.text = "\u{25C6} \(coinsPending)"
         waveLabel.text = isBoss ? "BOSS" : "WAVE \(wave) / \(totalWaves)"
 
         let nFrac = nectarThreshold > 0 ? CGFloat(max(0, min(1, Double(nectar) / Double(nectarThreshold)))) : 0

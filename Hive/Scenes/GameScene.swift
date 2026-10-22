@@ -13,32 +13,47 @@ extension EndOverlay: Overlay {}
 extension PauseOverlay: Overlay {}
 
 final class GameScene: SKScene {
+    private unowned let flow: AppFlow
+    private let level: LevelDefinition
+    private let levelId: Int
+    private let stats: HiveStats
+    private let cardPool: [UpgradeCard]
+    private let startingCardCount: Int
+    /// The run whose result has already been reported; guards against double-recording.
+    private var lastReportedRunID: UUID?
+
     private var world: World!
     private var mobNodes: [Int: MobNode] = [:]
     private var projectileNodes: [Int: ProjectileNode] = [:]
     private var lastUpdate: TimeInterval?
-    private var level: LevelDefinition!
     private var hud: HUDNode!
     private var overlay: Overlay?
     /// Game-level pause (distinct from `SKNode.isPaused`, which would also stop overlay rendering/actions).
     private var isGamePaused = false
 
+    init(level: LevelDefinition, levelId: Int, stats: HiveStats, cardPool: [UpgradeCard],
+         startingCardCount: Int, flow: AppFlow, size: CGSize) {
+        self.level = level
+        self.levelId = levelId
+        self.stats = stats
+        self.cardPool = cardPool
+        self.startingCardCount = startingCardCount
+        self.flow = flow
+        super.init(size: size)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
+
     override func didMove(to view: SKView) {
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
         backgroundColor = Palette.background
 
-        do {
-            guard let url = Bundle.main.url(forResource: "level_001", withExtension: "json", subdirectory: "Levels") else {
-                throw CocoaError(.fileNoSuchFile)
-            }
-            level = try LevelDefinition.load(from: Data(contentsOf: url))
-        } catch {
-            fatalError("Failed to load level_001.json: \(error)")
+        if hud == nil {
+            addChild(HiveNode(tier: 1))
+            hud = HUDNode(viewSize: size)
+            addChild(hud)
+            startRun()
         }
-        world = World(level: level, seed: UInt64(Date().timeIntervalSince1970 * 1000))
-        addChild(HiveNode(tier: 1))
-        hud = HUDNode(viewSize: size)
-        addChild(hud)
 
         NotificationCenter.default.addObserver(self, selector: #selector(appWillResignActive),
                                                name: UIApplication.willResignActiveNotification, object: nil)
@@ -78,7 +93,9 @@ final class GameScene: SKScene {
         overlay?.removeFromParent()
         overlay = nil
         isGamePaused = false
-        world = World(level: level, seed: UInt64(Date().timeIntervalSince1970 * 1000))
+        world = World(level: level, hiveStats: stats, cardPool: cardPool,
+                      startingCardCount: startingCardCount,
+                      seed: UInt64(Date().timeIntervalSince1970 * 1000))
         lastUpdate = nil
     }
 
@@ -115,10 +132,16 @@ final class GameScene: SKScene {
             overlay = o
             addChild(o)
         case .cleared, .gameOver:
-            let cleared = world.phase == .cleared
-            let o = EndOverlay(cleared: cleared, wave: world.director.waveNumber, viewSize: size) { [weak self] in
-                self?.startRun()
-            }
+            guard lastReportedRunID != world.runID else { return }
+            lastReportedRunID = world.runID
+            let result = flow.makeRunResult(world: world, levelId: levelId)
+            flow.runEnded(result)
+            let nextId = levelId + 1
+            let hasNext = flow.levels.availableLevelIDs().contains(nextId)
+            let onContinue: (() -> Void)? = hasNext ? { [weak self] in self?.flow.startLevel(id: nextId) } : nil
+            let o = EndOverlay(result: result, viewSize: size, onContinue: onContinue,
+                               onRetry: { [weak self] in self?.startRun() },
+                               onHome: { [weak self] in self?.flow.showHome() })
             overlay = o
             addChild(o)
         }
@@ -141,7 +164,11 @@ final class GameScene: SKScene {
         hud.update(hp: world.hive.hp, maxHP: world.hive.stats.maxHP,
                    wave: world.director.waveNumber, totalWaves: world.director.totalWaves,
                    isBoss: world.director.isBossWave,
-                   nectar: world.nectar.current, nectarThreshold: world.nectar.threshold)
+                   nectar: world.nectar.current, nectarThreshold: world.nectar.threshold,
+                   coinsPending: CoinRules.coins(levelId: levelId,
+                                                 wavesCleared: max(0, world.director.waveNumber - 1),
+                                                 cleared: false,
+                                                 multiplier: flow.state.upgrades.coinMultiplier))
         presentOverlayIfNeeded()
     }
 

@@ -19,7 +19,7 @@ final class CardPickOverlay: SKNode {
         let count = CGFloat(cards.count)
         let totalH = count * cardH + (count - 1) * gap
 
-        let title = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+        let title = SKLabelNode(fontNamed: Typography.font)
         title.text = "C H O O S E   A N   U P G R A D E"
         title.fontSize = 14
         title.fontColor = Palette.gold
@@ -38,7 +38,7 @@ final class CardPickOverlay: SKNode {
             shape.name = "card:\(card.id)"
             addChild(shape)
 
-            let name = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+            let name = SKLabelNode(fontNamed: Typography.font)
             name.text = card.name
             name.fontSize = 18
             name.fontColor = Palette.white
@@ -47,7 +47,7 @@ final class CardPickOverlay: SKNode {
             name.position = CGPoint(x: -cardW / 2 + 18, y: 12)
             shape.addChild(name)
 
-            let desc = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+            let desc = SKLabelNode(fontNamed: Typography.font)
             desc.text = card.description
             desc.fontSize = 13
             desc.fontColor = Palette.gold
@@ -57,7 +57,7 @@ final class CardPickOverlay: SKNode {
             desc.position = CGPoint(x: -cardW / 2 + 18, y: -14)
             shape.addChild(desc)
 
-            let tag = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+            let tag = SKLabelNode(fontNamed: Typography.font)
             tag.text = card.rarity.rawValue.uppercased()
             tag.fontSize = 10
             tag.fontColor = rare ? Palette.gold : Palette.amber

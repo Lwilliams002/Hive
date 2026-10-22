@@ -1,17 +1,5 @@
 import SpriteKit
 
-/// Flat-top hexagon: vertices at 0°, 60°, 120°, ...
-private func hexPath(circumradius r: CGFloat) -> CGPath {
-    let path = CGMutablePath()
-    for i in 0..<6 {
-        let a = CGFloat(i) * .pi / 3
-        let p = CGPoint(x: r * cos(a), y: r * sin(a))
-        if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
-    }
-    path.closeSubpath()
-    return path
-}
-
 final class HiveNode: SKNode {
     init(tier: Int) {
         super.init()
@@ -39,7 +27,7 @@ final class HiveNode: SKNode {
     required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
 
     private func cell(radius: CGFloat, color: UIColor, at p: CGPoint) -> SKShapeNode {
-        let n = SKShapeNode(path: hexPath(circumradius: radius))
+        let n = SKShapeNode(path: Shapes.hexPath(circumradius: radius))
         n.fillColor = color
         n.strokeColor = Palette.burntOrange
         n.lineWidth = 1.5

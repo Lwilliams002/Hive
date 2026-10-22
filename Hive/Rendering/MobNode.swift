@@ -17,14 +17,7 @@ final class MobNode: SKNode {
             shape = SKShapeNode(path: p)
             baseColor = Palette.slate
         case .hornet:
-            let p = CGMutablePath()
-            for i in 0..<6 {
-                let a = CGFloat(i) * .pi / 3
-                let pt = CGPoint(x: 14 * cos(a), y: 14 * sin(a))
-                if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
-            }
-            p.closeSubpath()
-            shape = SKShapeNode(path: p)
+            shape = SKShapeNode(path: Shapes.hexPath(circumradius: 14))
             baseColor = Palette.violet
         case .bear:
             shape = SKShapeNode(rectOf: CGSize(width: 60, height: 50), cornerRadius: 14)
