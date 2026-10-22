@@ -38,7 +38,7 @@ final class EndOverlay: SKNode {
         addChild(button)
 
         let label = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
-        label.text = "RETRY"
+        label.text = cleared ? "PLAY AGAIN" : "RETRY"
         label.fontSize = 16
         label.fontColor = Palette.background
         label.verticalAlignmentMode = .center

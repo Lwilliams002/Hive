@@ -42,6 +42,19 @@ final class HUDNode: SKNode {
         nectarFill.position = CGPoint(x: -nectarWidth / 2, y: nectarY)
         nectarFill.zPosition = 1
         addChild(nectarFill)
+
+        // Pause control: invisible 44×44 hit area holding two vertical bars.
+        let pause = SKSpriteNode(color: .clear, size: CGSize(width: 44, height: 44))
+        pause.name = "pause"
+        pause.position = CGPoint(x: viewSize.width / 2 - 24, y: top - 28)
+        addChild(pause)
+        for dx in [-5.0, 5.0] as [CGFloat] {   // bars 4 wide, 6 apart
+            let bar = SKShapeNode(rect: CGRect(x: dx - 2, y: -8, width: 4, height: 16))
+            bar.fillColor = Palette.gold
+            bar.strokeColor = .clear
+            bar.alpha = 0.85
+            pause.addChild(bar)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }

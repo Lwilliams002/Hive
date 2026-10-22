@@ -1,9 +1,10 @@
 import XCTest
 @testable import HiveCore
 
-/// Headless difficulty probe for level 1: base stats, always pick the first card offered.
-/// Intent (spec 5.3): hard but not impossible.
+/// Headless difficulty probes for level 1 (the on-ramp): base stats, two card-pick policies.
+/// First-card: a careless player clears sometimes. Greedy: a sensible player clears usually and nearly always reaches the boss.
 final class BalanceProbeTests: XCTestCase {
+    static let seeds = 1...20
     private func levelData() throws -> Data {
         var url = URL(fileURLWithPath: #filePath)
         url = url.deletingLastPathComponent()   // HiveCoreTests
@@ -23,7 +24,7 @@ final class BalanceProbeTests: XCTestCase {
         let level = try LevelDefinition.load(from: try levelData())
         var r = ProbeResult()
         var endWaveSum = 0
-        for seed in 1...20 {
+        for seed in Self.seeds {
             var world = World(level: level, seed: UInt64(seed))
             var sawBoss = false
             var t = 0.0
@@ -39,14 +40,14 @@ final class BalanceProbeTests: XCTestCase {
             if sawBoss { r.bossReached += 1 }
             endWaveSum += world.director.waveNumber
         }
-        r.avgEndWave = Double(endWaveSum) / 20
+        r.avgEndWave = Double(endWaveSum) / Double(Self.seeds.count)
         return r
     }
 
     func testLevelOneIsHardButNotImpossible() throws {
         let r = try runProbe { _, cards in cards[0] }
-        print("BalanceProbe: cleared \(r.cleared) / 20, boss reached \(r.bossReached) / 20, avg end wave \(String(format: "%.2f", r.avgEndWave))")
-        XCTAssertLessThanOrEqual(r.cleared, 6)
+        print("BalanceProbe: cleared \(r.cleared) / \(Self.seeds.count), boss reached \(r.bossReached) / \(Self.seeds.count), avg end wave \(String(format: "%.2f", r.avgEndWave))")
+        XCTAssertTrue((4...12).contains(r.cleared), "first-card cleared \(r.cleared) not in 4...12")
         XCTAssertGreaterThanOrEqual(r.bossReached, 1)
     }
 
@@ -59,8 +60,8 @@ final class BalanceProbeTests: XCTestCase {
             }
             return cards.min { (priority.firstIndex(of: $0.id) ?? 99) < (priority.firstIndex(of: $1.id) ?? 99) }!
         }
-        print("BalanceProbe(greedy): cleared \(r.cleared) / 20, boss reached \(r.bossReached) / 20, avg end wave \(String(format: "%.2f", r.avgEndWave))")
-        XCTAssertGreaterThanOrEqual(r.cleared, 4)
-        XCTAssertLessThanOrEqual(r.cleared, 14)
+        print("BalanceProbe(greedy): cleared \(r.cleared) / \(Self.seeds.count), boss reached \(r.bossReached) / \(Self.seeds.count), avg end wave \(String(format: "%.2f", r.avgEndWave))")
+        XCTAssertTrue((10...18).contains(r.cleared), "greedy cleared \(r.cleared) not in 10...18")
+        XCTAssertGreaterThanOrEqual(r.bossReached, 10)
     }
 }

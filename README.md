@@ -1,6 +1,6 @@
 # Hive
 
-Hive is an iOS tower-defense roguelite. A honeycomb hive sits at the centre of the screen and fires stingers at the nearest enemy automatically; waves of wasps, hornets and a boss bear close in from every side. Collected nectar levels you up and offers a choice of three upgrade cards. Lose all hive HP and the run ends (retry from the end overlay). Pure game logic lives in the Swift package `HiveCore`; the SpriteKit app is under `Hive/`.
+Hive is an iOS tower-defense roguelite. A honeycomb hive sits at the centre of the screen and fires stingers at the nearest enemy automatically; waves of wasps, hornets and a boss bear close in from every side. Collected nectar levels you up and offers a choice of three upgrade cards. The boss bear does not die on contact: it parks at the edge of the hive and hits it every second, so it must be killed to clear the level. Lose all hive HP and the run ends (retry from the end overlay). The pause button at the top right (and backgrounding the app) pauses play behind a RESUME overlay. Pure game logic lives in the Swift package `HiveCore`; the SpriteKit app is under `Hive/`.
 
 ## Commands
 
@@ -29,7 +29,7 @@ Levels are JSON in `Hive/Resources/Levels/` (`level_001.json`). The app crashes 
   - `isBoss` (optional, default false): marks a boss wave,
   - `spawns`: list of `{ "type": "wasp" | "hornet" | "bear", "count": n, "interval": seconds between spawns }`.
 
-`HiveCore/Tests/HiveCoreTests/BalanceProbeTests.swift` runs level 1 headlessly (seeds 1...20, always pick the first card) and prints a `BalanceProbe:` summary; re-run it after tuning numbers.
+`HiveCore/Tests/HiveCoreTests/BalanceProbeTests.swift` runs level 1 (the on-ramp) headlessly over seeds 1...20 with two card-pick policies and prints a `BalanceProbe:` / `BalanceProbe(greedy):` summary for each. The first-card probe (always take the first card offered) must clear 4–12 of 20 runs and reach the boss at least once; the greedy probe (prefer damage cards, heal when below 40% HP) must clear 10–18 of 20 and reach the boss in at least 10 of 20. Re-run it after tuning numbers.
 
 ## Docs
 

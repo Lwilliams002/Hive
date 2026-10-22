@@ -21,6 +21,8 @@ public struct World {
     private var spawnsLeftInWave = 0
 
     private static let hitFlashDuration = 0.08
+    /// Seconds between hits from a boss parked at the hive edge.
+    private static let bossAttackInterval = 1.0
     private static let spreadRadians = 10.0 * .pi / 180
 
     public init(level: LevelDefinition, hiveStats: HiveStats = .base, seed: UInt64) {
@@ -35,6 +37,8 @@ public struct World {
         guard phase == .playing else { return [] }
         // (1)
         guard dt > 0 else { return [] }
+        // Clamp large frame gaps (backgrounding, hitches) so one tick never tunnels mobs or bursts fire.
+        let dt = min(dt, 1.0 / 30)
         var events: [GameEvent] = []
 
         // (2)
@@ -62,12 +66,20 @@ public struct World {
             }
         }
 
-        // (4) move mobs toward origin; newly spawned mobs skip movement on their spawn tick so they start exactly on the spawn radius
+        // (4) move mobs toward origin; newly spawned mobs skip movement on their spawn tick so they start exactly on the spawn radius.
+        // Bosses stop at the hive edge (Hive.radius + their radius) instead of overlapping it.
         for i in 0..<preexistingMobCount {
             let pos = mobs[i].position
-            let step = mobs[i].type.stats.speed * dt
+            let stats = mobs[i].type.stats
+            let step = stats.speed * dt
             let dist = pos.length
-            mobs[i].position = step >= dist ? .zero : pos - pos.normalized * step
+            if stats.isBoss {
+                let edge = Hive.radius + stats.radius
+                if dist <= edge { continue }
+                mobs[i].position = dist - step <= edge ? pos.normalized * edge : pos - pos.normalized * step
+            } else {
+                mobs[i].position = step >= dist ? .zero : pos - pos.normalized * step
+            }
         }
 
         // (5) move projectiles; drop out-of-range
@@ -114,13 +126,26 @@ public struct World {
             return events
         }
 
-        // (8) mob–hive contact
+        // (8) mob–hive contact. Non-boss mobs deal contact damage once and are removed.
+        // Bosses parked at the hive edge stay alive and hit once on arrival, then every `bossAttackInterval` seconds.
         var contacted = Set<Int>()
-        for mob in mobs where mob.position.length < Hive.radius + mob.type.stats.radius {
-            let amount = mob.type.stats.contactDamage
-            hive.hp -= amount
-            events.append(.hiveDamaged(amount: amount, hp: hive.hp))
-            contacted.insert(mob.id)
+        for i in mobs.indices {
+            let stats = mobs[i].type.stats
+            let edge = Hive.radius + stats.radius
+            let dist = mobs[i].position.length
+            if stats.isBoss {
+                guard dist <= edge + 1e-6 else { continue }
+                mobs[i].attackCooldown -= dt
+                if mobs[i].attackCooldown <= 0 {
+                    hive.hp -= stats.contactDamage
+                    events.append(.hiveDamaged(amount: stats.contactDamage, hp: hive.hp))
+                    mobs[i].attackCooldown += World.bossAttackInterval
+                }
+            } else if dist < edge {
+                hive.hp -= stats.contactDamage
+                events.append(.hiveDamaged(amount: stats.contactDamage, hp: hive.hp))
+                contacted.insert(mobs[i].id)
+            }
         }
         mobs.removeAll { contacted.contains($0.id) }
 

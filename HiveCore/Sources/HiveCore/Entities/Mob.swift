@@ -42,6 +42,8 @@ public struct Mob: Identifiable, Equatable {
     public var hp: Double
     /// Seconds remaining of the hit-flash rendering hint.
     public var hitFlash: Double
+    /// Seconds until a boss parked at the hive edge hits again; 0 means it hits on arrival.
+    public var attackCooldown: Double
 
     public init(id: Int, type: MobType, position: Vec2) {
         self.id = id
@@ -49,5 +51,6 @@ public struct Mob: Identifiable, Equatable {
         self.position = position
         self.hp = type.stats.maxHP
         self.hitFlash = 0
+        self.attackCooldown = 0
     }
 }

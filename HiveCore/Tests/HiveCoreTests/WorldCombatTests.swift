@@ -56,13 +56,44 @@ final class WorldCombatTests: XCTestCase {
         XCTAssertEqual(ev.filter { $0 == .gameOver }.count, 1)
         XCTAssertFalse(ev.contains(.levelCleared))
     }
-    func testBossWaveClearedByContactStillResolvesOnce() {
-        // hive survives the bear's contact (hp 100 vs 40) and the bear dies on contact → cleared exactly once, no gameOver
+    func testBossStopsAtHiveEdgeAndOutdamagesHive() {
+        // bear: 520 → edge at 70, speed 28 → arrives ≈16.1 s; 40 dmg on arrival then every 1 s → hp 60, 20, -20
         var w = World(level: oneBearBossLevel(), hiveStats: HiveStats(damage: 0.0001, fireRate: 0.01), seed: 3)
-        let ev = run(&w, seconds: 30)
+        let edge = Hive.radius + MobType.bear.stats.radius
+        var ev = run(&w, seconds: 16.5)
+        XCTAssertEqual(w.mobs.count, 1)
+        XCTAssertEqual(w.mobs[0].position.length, edge, accuracy: 1e-6)
+        ev += run(&w, seconds: 0.4)
+        XCTAssertEqual(w.mobs[0].position.length, edge, accuracy: 1e-6)   // stays parked
+        ev += run(&w, seconds: 40 - 16.9)
+        XCTAssertEqual(w.mobs.first?.position.length ?? 0, edge, accuracy: 1e-6)
+        let hits = ev.compactMap { e -> GameEvent? in if case .hiveDamaged = e { return e }; return nil }
+        XCTAssertEqual(hits, [.hiveDamaged(amount: 40, hp: 60), .hiveDamaged(amount: 40, hp: 20), .hiveDamaged(amount: 40, hp: -20)])
+        XCTAssertEqual(w.phase, .gameOver)
+        XCTAssertEqual(ev.filter { $0 == .gameOver }.count, 1)
+        XCTAssertFalse(ev.contains(.levelCleared))
+    }
+    func testBossKilledAtEdgeClearsLevelOnce() {
+        var w = World(level: oneBearBossLevel(), hiveStats: HiveStats(maxHP: 100000, damage: 50, fireRate: 10), seed: 3)
+        // the bear's 15 nectar crosses the first threshold, so resolve the card pick to let the clear check run
+        var ev: [GameEvent] = []; var t = 0.0
+        while t < 40 {
+            ev += w.tick(dt: 1.0/60); t += 1.0/60
+            if case .pickingCards(let cards) = w.phase { w.choose(cards[0]) }
+        }
         XCTAssertEqual(w.phase, .cleared)
         XCTAssertEqual(ev.filter { $0 == .levelCleared }.count, 1)
         XCTAssertFalse(ev.contains(.gameOver))
+        XCTAssertTrue(w.mobs.isEmpty)
+    }
+    func testHugeDtIsClampedToOneThirtieth() {
+        var w = World(level: oneWaspLevel(), seed: 1)
+        _ = w.tick(dt: 1.0/60)
+        let spawn = w.mobs[0].position
+        let ev = w.tick(dt: 10)
+        XCTAssertLessThanOrEqual(ev.filter { if case .projectileFired = $0 { return true }; return false }.count, 1)
+        XCTAssertEqual(w.mobs.count, 1)
+        XCTAssertLessThanOrEqual(w.mobs[0].position.distance(to: spawn), 90.0 / 30 + 1e-9)
     }
     func testPierceHitsSecondMobOnce() {
         var w = World(level: oneWaspLevel(), hiveStats: HiveStats(pierce: 1), seed: 1)

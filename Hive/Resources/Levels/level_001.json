@@ -1,7 +1,7 @@
 { "id": 1, "name": "First Light", "waves": [
-  { "delay": 1.5, "spawns": [ { "type": "wasp", "count": 6,  "interval": 0.9 } ] },
-  { "delay": 2.5, "spawns": [ { "type": "wasp", "count": 10, "interval": 0.6 } ] },
-  { "delay": 2.5, "spawns": [ { "type": "wasp", "count": 6,  "interval": 0.5 }, { "type": "hornet", "count": 3, "interval": 2.5 } ] },
-  { "delay": 2.5, "spawns": [ { "type": "hornet", "count": 3, "interval": 1.6 }, { "type": "wasp", "count": 7, "interval": 0.4 } ] },
-  { "delay": 3.0, "isBoss": true, "spawns": [ { "type": "bear", "count": 1, "interval": 0 }, { "type": "wasp", "count": 10, "interval": 0.5 }, { "type": "hornet", "count": 3, "interval": 2.0 } ] }
+  { "delay": 1.5, "spawns": [ { "type": "wasp", "count": 8,  "interval": 0.9 } ] },
+  { "delay": 2.5, "spawns": [ { "type": "wasp", "count": 12, "interval": 0.7 } ] },
+  { "delay": 2.5, "spawns": [ { "type": "wasp", "count": 6,  "interval": 0.7 }, { "type": "hornet", "count": 2, "interval": 3.0 } ] },
+  { "delay": 2.5, "spawns": [ { "type": "hornet", "count": 2, "interval": 2.5 }, { "type": "wasp", "count": 5, "interval": 0.7 } ] },
+  { "delay": 3.0, "isBoss": true, "spawns": [ { "type": "bear", "count": 1, "interval": 0 }, { "type": "wasp", "count": 3, "interval": 3.0 } ] }
 ] }

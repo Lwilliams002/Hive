@@ -1,5 +1,16 @@
 import SpriteKit
+import UIKit
 import HiveCore
+
+/// Modal layer shown above play; the scene forwards touches to it in its own coordinate space.
+protocol Overlay: SKNode {
+    var zPosition: CGFloat { get set }
+    func handleTouch(at point: CGPoint)
+}
+
+extension CardPickOverlay: Overlay {}
+extension EndOverlay: Overlay {}
+extension PauseOverlay: Overlay {}
 
 final class GameScene: SKScene {
     private var world: World!
@@ -8,7 +19,9 @@ final class GameScene: SKScene {
     private var lastUpdate: TimeInterval?
     private var level: LevelDefinition!
     private var hud: HUDNode!
-    private var overlay: SKNode?
+    private var overlay: Overlay?
+    /// Game-level pause (distinct from `SKNode.isPaused`, which would also stop overlay rendering/actions).
+    private var isGamePaused = false
 
     override func didMove(to view: SKView) {
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
@@ -26,6 +39,35 @@ final class GameScene: SKScene {
         addChild(HiveNode(tier: 1))
         hud = HUDNode(viewSize: size)
         addChild(hud)
+
+        NotificationCenter.default.addObserver(self, selector: #selector(appWillResignActive),
+                                               name: UIApplication.willResignActiveNotification, object: nil)
+    }
+
+    override func willMove(from view: SKView) {
+        NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func appWillResignActive() {
+        pauseGame()
+    }
+
+    /// Pauses play and shows the pause overlay; no-op unless playing with no overlay up.
+    private func pauseGame() {
+        guard world != nil, world.phase == .playing, overlay == nil, !isGamePaused else { return }
+        isGamePaused = true
+        let o = PauseOverlay(viewSize: size) { [weak self] in
+            guard let self = self else { return }
+            self.isGamePaused = false
+            self.overlay = nil
+            self.lastUpdate = nil
+        }
+        overlay = o
+        addChild(o)
     }
 
     private func startRun() {
@@ -35,17 +77,27 @@ final class GameScene: SKScene {
         projectileNodes.removeAll()
         overlay?.removeFromParent()
         overlay = nil
+        isGamePaused = false
         world = World(level: level, seed: UInt64(Date().timeIntervalSince1970 * 1000))
         lastUpdate = nil
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let overlay = overlay, let touch = touches.first else { return }
-        let p = touch.location(in: overlay)
-        if let o = overlay as? CardPickOverlay {
-            o.handleTouch(at: p)
-        } else if let o = overlay as? EndOverlay {
-            o.handleTouch(at: p)
+        guard let touch = touches.first else { return }
+        if let overlay = overlay {
+            overlay.handleTouch(at: touch.location(in: overlay))
+            return
+        }
+        guard let hud = hud else { return }
+        for hit in hud.nodes(at: touch.location(in: hud)) {
+            var node: SKNode? = hit
+            while let n = node {
+                if n.name == "pause" {
+                    pauseGame()
+                    return
+                }
+                node = n.parent
+            }
         }
     }
 
@@ -82,12 +134,8 @@ final class GameScene: SKScene {
         }
         lastUpdate = currentTime
 
-        for event in world.tick(dt: dt) {
-            switch event {
-            case .levelCleared: print("levelCleared")
-            case .gameOver: print("gameOver")
-            default: break
-            }
+        if !isGamePaused {
+            world.tick(dt: dt)
         }
         reconcile()
         hud.update(hp: world.hive.hp, maxHP: world.hive.stats.maxHP,
