@@ -1,0 +1,4 @@
+{ "id": 99, "name": "Test", "waves": [
+  { "delay": 1.0, "spawns": [ { "type": "wasp", "count": 3, "interval": 0.5 } ] },
+  { "delay": 2.0, "isBoss": true, "spawns": [ { "type": "bear", "count": 1, "interval": 0 }, { "type": "wasp", "count": 2, "interval": 1.0 } ] }
+] }
