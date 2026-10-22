@@ -11,7 +11,11 @@ public struct World {
 
     public static let spawnRadius: Double = 520
 
+    public let runID: UUID
+    public private(set) var startingCards: [UpgradeCard] = []
+
     private let level: LevelDefinition
+    private let cardPool: [UpgradeCard]
     private var rng: SeededRNG
     /// Shared id counter for mobs and projectiles.
     private var nextID = 1
@@ -25,11 +29,18 @@ public struct World {
     private static let bossAttackInterval = 1.0
     private static let spreadRadians = 10.0 * .pi / 180
 
-    public init(level: LevelDefinition, hiveStats: HiveStats = .base, seed: UInt64) {
+    public init(level: LevelDefinition, hiveStats: HiveStats = .base,
+                cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
+                startingCardCount: Int = 0, seed: UInt64) {
         self.level = level
+        self.cardPool = cardPool
+        self.runID = UUID()
         self.director = WaveDirector(level: level)
         self.hive = Hive(stats: hiveStats, hp: hiveStats.maxHP, cooldown: 0)
         self.rng = SeededRNG(seed: seed)
+        let drawn = UpgradeCatalog.draw(count: startingCardCount, from: cardPool, rng: &rng)
+        for card in drawn { apply(card: card) }
+        self.startingCards = drawn
     }
 
     @discardableResult
@@ -121,7 +132,7 @@ public struct World {
 
         // Nectar threshold: pause into card pick, skipping the rest of the tick.
         if thresholdCrossed {
-            phase = .pickingCards(UpgradeCatalog.draw(count: 3, from: UpgradeCatalog.milestone1, rng: &rng))
+            phase = .pickingCards(UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng))
             events.append(.nectarThreshold)
             return events
         }
@@ -183,10 +194,14 @@ public struct World {
     /// Applies the chosen card and resumes play. No-op outside `.pickingCards`.
     public mutating func choose(_ card: UpgradeCard) {
         guard case .pickingCards = phase else { return }
+        apply(card: card)
+        phase = .playing
+    }
+
+    private mutating func apply(card: UpgradeCard) {
         var stats = hive.stats
         stats.apply(card.effect, to: &hive)
         hive.stats = stats
-        phase = .playing
     }
 
     // MARK: - Helpers
