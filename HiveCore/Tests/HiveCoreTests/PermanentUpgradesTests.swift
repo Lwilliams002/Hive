@@ -49,6 +49,10 @@ final class PermanentUpgradesTests: XCTestCase {
         let data = try JSONEncoder().encode(u)
         XCTAssertEqual(try JSONDecoder().decode(PermanentUpgrades.self, from: data), u)
 
+        XCTAssertEqual(try JSONDecoder().decode(PermanentUpgrades.self,
+                                                from: JSONEncoder().encode(PermanentUpgrades())), PermanentUpgrades())
+        XCTAssertEqual(PermanentUpgrades(tiers: [.comb: 0]), PermanentUpgrades())
+
         let partial = try JSONDecoder().decode(PermanentUpgrades.self,
                                                from: Data(#"{"tiers":{"comb":2}}"#.utf8))
         XCTAssertEqual(partial.tier(of: .comb), 2)
@@ -68,6 +72,8 @@ final class PermanentUpgradesTests: XCTestCase {
         let u = PermanentUpgrades()
         XCTAssertEqual(u.effectDescription(for: .comb, atTier: 3), "HP 145")
         XCTAssertEqual(u.effectDescription(for: .stinger, atTier: 3), "Damage 14.5")
+        XCTAssertEqual(u.effectDescription(for: .stinger, atTier: 2), "Damage 13")
+        XCTAssertEqual(u.effectDescription(for: .swarm, atTier: 1), "Fire rate 2.2/s · 1 stinger")
         XCTAssertEqual(u.effectDescription(for: .swarm, atTier: 8), "Fire rate 3.2/s · 3 stingers")
         XCTAssertEqual(u.effectDescription(for: .nectar, atTier: 3), "+30% coins")
         XCTAssertEqual(u.effectDescription(for: .queen, atTier: 3), "1 starting card")

@@ -12,7 +12,8 @@ public struct PermanentUpgrades: Codable, Equatable {
     public init(tiers: [UpgradeTrack: Int]) {
         var clamped: [UpgradeTrack: Int] = [:]
         for (track, t) in tiers {
-            clamped[track] = min(max(t, 0), PermanentUpgrades.maxTier)
+            let v = min(max(t, 0), PermanentUpgrades.maxTier)
+            if v > 0 { clamped[track] = v }  // normalize: zero tiers are never stored
         }
         self.tiers = clamped
     }
