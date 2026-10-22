@@ -6,12 +6,14 @@ final class GameScene: SKScene {
     private var mobNodes: [Int: MobNode] = [:]
     private var projectileNodes: [Int: ProjectileNode] = [:]
     private var lastUpdate: TimeInterval?
+    private var level: LevelDefinition!
+    private var hud: HUDNode!
+    private var overlay: SKNode?
 
     override func didMove(to view: SKView) {
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
         backgroundColor = Palette.background
 
-        let level: LevelDefinition
         do {
             guard let url = Bundle.main.url(forResource: "level_001", withExtension: "json", subdirectory: "Levels") else {
                 throw CocoaError(.fileNoSuchFile)
@@ -20,8 +22,54 @@ final class GameScene: SKScene {
         } catch {
             fatalError("Failed to load level_001.json: \(error)")
         }
-        world = World(level: level, seed: UInt64(Date().timeIntervalSince1970))
+        world = World(level: level, seed: UInt64(Date().timeIntervalSince1970 * 1000))
         addChild(HiveNode(tier: 1))
+        hud = HUDNode(viewSize: size)
+        addChild(hud)
+    }
+
+    private func startRun() {
+        for node in mobNodes.values { node.removeFromParent() }
+        for node in projectileNodes.values { node.removeFromParent() }
+        mobNodes.removeAll()
+        projectileNodes.removeAll()
+        overlay?.removeFromParent()
+        overlay = nil
+        world = World(level: level, seed: UInt64(Date().timeIntervalSince1970 * 1000))
+        lastUpdate = nil
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let overlay = overlay, let touch = touches.first else { return }
+        let p = touch.location(in: overlay)
+        if let o = overlay as? CardPickOverlay {
+            o.handleTouch(at: p)
+        } else if let o = overlay as? EndOverlay {
+            o.handleTouch(at: p)
+        }
+    }
+
+    private func presentOverlayIfNeeded() {
+        guard overlay == nil else { return }
+        switch world.phase {
+        case .playing:
+            break
+        case .pickingCards(let cards):
+            let o = CardPickOverlay(cards: cards, viewSize: size) { [weak self] card in
+                guard let self = self else { return }
+                self.world.choose(card)
+                self.overlay = nil
+            }
+            overlay = o
+            addChild(o)
+        case .cleared, .gameOver:
+            let cleared = world.phase == .cleared
+            let o = EndOverlay(cleared: cleared, wave: world.director.waveNumber, viewSize: size) { [weak self] in
+                self?.startRun()
+            }
+            overlay = o
+            addChild(o)
+        }
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -42,6 +90,11 @@ final class GameScene: SKScene {
             }
         }
         reconcile()
+        hud.update(hp: world.hive.hp, maxHP: world.hive.stats.maxHP,
+                   wave: world.director.waveNumber, totalWaves: world.director.totalWaves,
+                   isBoss: world.director.isBossWave,
+                   nectar: world.nectar.current, nectarThreshold: world.nectar.threshold)
+        presentOverlayIfNeeded()
     }
 
     private func reconcile() {
