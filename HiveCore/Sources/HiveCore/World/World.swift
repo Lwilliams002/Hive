@@ -30,8 +30,8 @@ public struct World {
     /// Seconds between hits from a boss parked at the hive edge.
     private static let bossAttackInterval = 1.0
     private static let spreadRadians = 10.0 * .pi / 180
-    /// Gap between a boss's edge and its escorts' spawn point, toward the hive.
-    private static let escortGap = 8.0
+    /// Escorts never spawn closer to the hive than this (≈1.5 s of hive fire before contact).
+    private static let escortMinDistance = 140.0
     private static let escortJitterRadians = 15.0 * .pi / 180
 
     public init(level: LevelDefinition, hiveStats: HiveStats = .base,
@@ -242,17 +242,18 @@ public struct World {
         mob.hp -= max(1, raw - mob.type.stats.armor)
     }
 
-    /// Spawns `escort.count` mobs `radius + escortGap` from the parent toward the hive, each rotated by a
-    /// ±15° jitter about the parent, inheriting the parent's `hpScale`.
+    /// Spawns `escort.count` mobs on the parent's bearing from the hive (each with its own ±15° jitter) at
+    /// `max(parent distance, escortMinDistance)`, so a boss parked at the hive edge never spawns escorts inside
+    /// contact range. Escorts inherit the parent's `hpScale`.
     private mutating func spawnEscort(_ escort: EscortSpawn, parentIndex i: Int, events: inout [GameEvent]) {
         let parent = mobs[i]
-        let offset = (Vec2.zero - parent.position.normalized) * (parent.type.stats.radius + World.escortGap)
+        let bearing = atan2(parent.position.y, parent.position.x)
+        let distance = max(parent.position.length, World.escortMinDistance)
         var ids: [Int] = []
         for _ in 0..<escort.count {
-            let jitter = (rng.unitDouble() * 2 - 1) * World.escortJitterRadians
-            let c = cos(jitter), s = sin(jitter)
-            let rotated = Vec2(offset.x * c - offset.y * s, offset.x * s + offset.y * c)
-            let mob = Mob(id: makeID(), type: escort.type, position: parent.position + rotated, hpScale: parent.hpScale)
+            let angle = bearing + (rng.unitDouble() * 2 - 1) * World.escortJitterRadians
+            let mob = Mob(id: makeID(), type: escort.type, position: Vec2(cos(angle), sin(angle)) * distance,
+                          hpScale: parent.hpScale)
             mobs.append(mob)
             ids.append(mob.id)
             events.append(.mobSpawned(id: mob.id, type: mob.type))

@@ -60,9 +60,10 @@ final class MobBehaviorTests: XCTestCase {
         let hornetIDs = w.mobs.filter { $0.type == .hornet }.map(\.id)
         XCTAssertTrue(ev.contains(.escortSpawned(parentID: queen.id, ids: hornetIDs)))
         for h in w.mobs where h.type == .hornet {
-            // spawned ~34 pt (queen radius 26 + 8) toward the hive, within ±15° jitter
-            XCTAssertEqual(h.position.distance(to: queen.position), 34, accuracy: 2)
-            XCTAssertLessThan(h.position.length, queen.position.length)
+            // an approaching queen spawns escorts beside itself: same distance from the hive, bearing within ±15°
+            XCTAssertEqual(h.position.length, queen.position.length, accuracy: 2)
+            let dAngle = abs(remainder(atan2(h.position.y, h.position.x) - atan2(queen.position.y, queen.position.x), 2 * .pi))
+            XCTAssertLessThanOrEqual(dAngle, 15.0 * .pi / 180 + 1e-9)
         }
         ev += run(&w, seconds: 6.0)
         XCTAssertEqual(count(w, .hornet), 4)
@@ -127,5 +128,22 @@ final class MobBehaviorTests: XCTestCase {
         XCTAssertFalse(ev.contains(.waveStarted(number: 2, isBoss: false)))
         XCTAssertEqual(w.director.waveNumber, 1)
         XCTAssertEqual(w.phase, .playing)
+    }
+
+    func testEscortsSpawnOutsideContactRange() {
+        // a queen parked at the hive edge (40 + 26) spawns its escorts 140 pt out, not inside contact range
+        var w = World(level: level(#"{"id":10,"name":"t","waves":[{"delay":100,"spawns":[{"type":"wasp","count":1,"interval":0}]}]}"#),
+                      hiveStats: HiveStats(maxHP: 100000, damage: 0.0001, fireRate: 0.01), seed: 7)
+        w.debugAddMob(type: .hornetQueen, position: Vec2(Hive.radius + MobType.hornetQueen.stats.radius, 0))
+        var t = 0.0; var spawned: [Int] = []
+        while t < 4 && spawned.isEmpty {
+            for e in w.tick(dt: 1.0/60) { if case .escortSpawned(_, let ids) = e { spawned = ids } }
+            t += 1.0/60
+        }
+        XCTAssertEqual(spawned.count, 2)
+        for h in w.mobs where spawned.contains(h.id) {
+            XCTAssertGreaterThanOrEqual(h.position.length, 140 - 1e-6)
+        }
+        XCTAssertEqual(w.mobs.filter { $0.type == .hornet }.count, 2)   // none consumed by contact on the spawn tick
     }
 }
