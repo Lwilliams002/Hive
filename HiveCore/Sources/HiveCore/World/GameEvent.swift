@@ -6,6 +6,8 @@ public enum GameEvent: Equatable {
     case escortSpawned(parentID: Int, ids: [Int])
     case projectileFired(id: Int)
     case mobHit(id: Int)
+    /// A guard bee stung mob `mobID`.
+    case beeHit(mobID: Int)
     case mobKilled(id: Int, type: MobType, at: Vec2)
     case hiveDamaged(amount: Double, hp: Double)
     case waveStarted(number: Int, isBoss: Bool)

@@ -8,6 +8,9 @@ public struct World {
     public private(set) var phase: RunPhase = .playing
     public private(set) var time: Double = 0
     public private(set) var nectar = NectarMeter()
+    public private(set) var modifiers = RunModifiers()
+    /// Guard bees orbiting the hive (`modifiers.guardBeeCount` of them).
+    public private(set) var bees: [GuardBee] = []
 
     public static let spawnRadius: Double = 520
 
@@ -87,6 +90,7 @@ public struct World {
         // appended after `preexistingMobCount`, so like other new spawns they skip movement this tick.
         for i in 0..<mobs.count {
             guard let escort = mobs[i].type.stats.escort else { continue }
+            precondition(escort.every > 0, "escort interval must be positive")
             mobs[i].escortTimer -= dt
             while mobs[i].escortTimer <= 0 {
                 spawnEscort(escort, parentIndex: i, events: &events)
@@ -99,7 +103,8 @@ public struct World {
         for i in 0..<preexistingMobCount {
             let pos = mobs[i].position
             let stats = mobs[i].type.stats
-            let step = stats.speed * dt
+            let slowed = modifiers.slowRadius > 0 && pos.length < modifiers.slowRadius
+            let step = stats.speed * (slowed ? modifiers.slowFactor : 1) * dt
             let dist = pos.length
             if stats.isBoss {
                 let edge = Hive.radius + stats.radius
@@ -126,7 +131,8 @@ public struct World {
                 if deadIDs.contains(mob.id) || projectiles[p].hitMobIDs.contains(mob.id) { continue }
                 let reach = mob.type.stats.radius + Projectile.radius
                 guard projectiles[p].position.distance(to: mob.position) < reach else { continue }
-                damage(projectiles[p].damage, to: &mobs[m])
+                let raw = projectiles[p].damage
+                damage(raw, to: &mobs[m])
                 mobs[m].hitFlash = World.hitFlashDuration
                 projectiles[p].hitMobIDs.append(mob.id)
                 events.append(.mobHit(id: mob.id))
@@ -134,6 +140,21 @@ public struct World {
                     deadIDs.insert(mob.id)
                     events.append(.mobKilled(id: mob.id, type: mob.type, at: mobs[m].position))
                     if nectar.add(mob.type.stats.nectar) { thresholdsCrossed += 1 }
+                }
+                // Splash: other alive mobs near the hit mob take a fraction of the raw damage (never chains).
+                if modifiers.splashRadius > 0 && modifiers.splashFraction > 0 {
+                    let center = mobs[m].position
+                    for n in mobs.indices where n != m && !deadIDs.contains(mobs[n].id) {
+                        guard mobs[n].position.distance(to: center) < modifiers.splashRadius else { continue }
+                        splashDamage(raw * modifiers.splashFraction, to: &mobs[n])
+                        mobs[n].hitFlash = World.hitFlashDuration
+                        events.append(.mobHit(id: mobs[n].id))
+                        if mobs[n].hp <= 0 {
+                            deadIDs.insert(mobs[n].id)
+                            events.append(.mobKilled(id: mobs[n].id, type: mobs[n].type, at: mobs[n].position))
+                            if nectar.add(mobs[n].type.stats.nectar) { thresholdsCrossed += 1 }
+                        }
+                    }
                 }
                 projectiles[p].pierceRemaining -= 1
                 if projectiles[p].pierceRemaining < 0 {
@@ -159,22 +180,25 @@ public struct World {
 
         // (8) mob–hive contact. Non-boss mobs deal contact damage once and are removed.
         // Bosses parked at the hive edge stay alive and hit once on arrival, then every `bossAttackInterval` seconds.
+        // Contact damage is reduced by `modifiers.contactResist`.
         var contacted = Set<Int>()
+        let contactScale = 1 - modifiers.contactResist
         for i in mobs.indices {
             let stats = mobs[i].type.stats
             let edge = Hive.radius + stats.radius
             let dist = mobs[i].position.length
+            let amount = stats.contactDamage * contactScale
             if stats.isBoss {
                 guard dist <= edge + 1e-6 else { continue }
                 mobs[i].attackCooldown -= dt
                 if mobs[i].attackCooldown <= 0 {
-                    hive.hp -= stats.contactDamage
-                    events.append(.hiveDamaged(amount: stats.contactDamage, hp: hive.hp))
+                    hive.hp -= amount
+                    events.append(.hiveDamaged(amount: amount, hp: hive.hp))
                     mobs[i].attackCooldown += World.bossAttackInterval
                 }
             } else if dist < edge {
-                hive.hp -= stats.contactDamage
-                events.append(.hiveDamaged(amount: stats.contactDamage, hp: hive.hp))
+                hive.hp -= amount
+                events.append(.hiveDamaged(amount: amount, hp: hive.hp))
                 contacted.insert(mobs[i].id)
             }
         }
@@ -196,6 +220,40 @@ public struct World {
             }
             fireVolley(at: target.position, events: &events)
             hive.cooldown += 1 / hive.stats.fireRate
+        }
+
+        // (10b) guard bees: positions derived from `time`; each bee hits a touching mob at most every
+        // `GuardBee.hitCooldown` seconds. Mobs killed here are removed this tick.
+        if !bees.isEmpty {
+            let positions = beePositions
+            var beeKills = Set<Int>()
+            var beeThresholds = 0
+            for b in bees.indices {
+                // Decay cooldowns; expired entries are dropped (absent ≡ ready), which also forgets removed mobs.
+                bees[b].cooldowns = bees[b].cooldowns.compactMapValues { $0 - dt > 0 ? $0 - dt : nil }
+                for m in mobs.indices where !beeKills.contains(mobs[m].id) {
+                    let reach = mobs[m].type.stats.radius + GuardBee.touchRadius
+                    guard positions[b].distance(to: mobs[m].position) < reach,
+                          bees[b].cooldowns[mobs[m].id, default: 0] <= 0 else { continue }
+                    damage(modifiers.beeDamage, to: &mobs[m])
+                    mobs[m].hitFlash = World.hitFlashDuration
+                    bees[b].cooldowns[mobs[m].id] = GuardBee.hitCooldown
+                    events.append(.beeHit(mobID: mobs[m].id))
+                    if mobs[m].hp <= 0 {
+                        beeKills.insert(mobs[m].id)
+                        events.append(.mobKilled(id: mobs[m].id, type: mobs[m].type, at: mobs[m].position))
+                        if nectar.add(mobs[m].type.stats.nectar) { beeThresholds += 1 }
+                    }
+                }
+            }
+            mobs.removeAll { beeKills.contains($0.id) }
+            // Same rule as step 6: pause into a pick unless these kills emptied the level.
+            if beeThresholds > 0 && !(director.allSpawnsIssued && mobs.isEmpty) {
+                pendingPicks = beeThresholds - 1
+                phase = .pickingCards(drawCards())
+                events.append(.nectarThreshold)
+                return events
+            }
         }
 
         // (11) decay hit flash
@@ -229,17 +287,36 @@ public struct World {
         var stats = hive.stats
         stats.apply(card.effect, to: &hive)
         hive.stats = stats
+        modifiers.apply(card.effect)
+        while bees.count < modifiers.guardBeeCount {
+            bees.append(GuardBee(id: bees.count))
+        }
+    }
+
+    /// Current bee positions: bee `k` of `n` at angle `2.4 · time + 2πk/n` on the 72-pt orbit.
+    public var beePositions: [Vec2] {
+        let n = bees.count
+        let base = GuardBee.angularSpeed * time
+        return (0..<n).map { k in
+            let angle = base + 2 * .pi * Double(k) / Double(n)
+            return Vec2(cos(angle), sin(angle)) * GuardBee.orbitRadius
+        }
     }
 
     // MARK: - Helpers
 
     private mutating func drawCards() -> [UpgradeCard] {
-        UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng)
+        UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng, epicWeight: min(25, 5 + 3 * nectar.level))
     }
 
     /// Every damage path goes through here: flat armor reduction, minimum 1 per hit.
     private func damage(_ raw: Double, to mob: inout Mob) {
         mob.hp -= max(1, raw - mob.type.stats.armor)
+    }
+
+    /// Splash damage to a neighbor: flat armor reduction with no minimum (armor can absorb it entirely).
+    private func splashDamage(_ raw: Double, to mob: inout Mob) {
+        mob.hp -= max(0, raw - mob.type.stats.armor)
     }
 
     /// Spawns `escort.count` mobs on the parent's bearing from the hive (each with its own ±15° jitter) at
@@ -285,6 +362,10 @@ public struct World {
     }
 
     // MARK: - Test hooks (internal; reachable via @testable)
+
+    mutating func debugApplyCard(_ card: UpgradeCard) {
+        apply(card: card)
+    }
 
     mutating func debugSetMob(index: Int, position: Vec2, hp: Double) {
         mobs[index].position = position
