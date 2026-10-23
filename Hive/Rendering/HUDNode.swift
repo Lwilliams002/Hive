@@ -68,14 +68,22 @@ final class HUDNode: SKNode {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
 
-    func update(hp: Double, maxHP: Double, wave: Int, totalWaves: Int, isBoss: Bool,
+    func update(hp: Double, maxHP: Double, wave: Int, totalWaves: Int?, best: Int?, isBoss: Bool,
                 nectar: Int, nectarThreshold: Int, coinsPending: Int) {
         let hpFrac = maxHP > 0 ? CGFloat(max(0, min(1, hp / maxHP))) : 0
         hpFill.size.width = hpWidth * hpFrac
         hpFill.color = hpFrac < 0.25 ? Palette.white : Palette.gold
 
         coinsLabel.text = "+\(coinsPending) \u{25C6}"
-        waveLabel.text = isBoss ? "BOSS" : "WAVE \(wave) / \(totalWaves)"
+        if let totalWaves = totalWaves {
+            waveLabel.text = isBoss ? "BOSS" : "WAVE \(wave) / \(totalWaves)"
+        } else if isBoss {
+            waveLabel.text = "BOSS \u{00B7} WAVE \(wave)"
+        } else if let best = best, best > 0 {
+            waveLabel.text = "WAVE \(wave) \u{00B7} BEST \(best)"
+        } else {
+            waveLabel.text = "WAVE \(wave)"
+        }
 
         let nFrac = nectarThreshold > 0 ? CGFloat(max(0, min(1, Double(nectar) / Double(nectarThreshold)))) : 0
         nectarFill.size.width = nectarWidth * nFrac

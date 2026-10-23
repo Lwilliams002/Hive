@@ -6,7 +6,7 @@ final class EndOverlay: SKNode {
     private var actions: [(Button, () -> Void)] = []
     private var isDone = false
 
-    init(result: RunResult, viewSize: CGSize, onContinue: (() -> Void)?,
+    init(result: RunResult, previousBest: Int = 0, viewSize: CGSize, onContinue: (() -> Void)?,
          onRetry: @escaping () -> Void, onHome: @escaping () -> Void) {
         super.init()
         zPosition = 200
@@ -15,19 +15,32 @@ final class EndOverlay: SKNode {
         dim.alpha = 0.72
         addChild(dim)
 
+        let isEndless = result.mode == .endless
         let cleared = result.cleared
+        let newBest = isEndless && result.wavesCleared > previousBest
         let title = SKLabelNode(fontNamed: Typography.font)
-        title.text = cleared ? "HIVE SURVIVED" : "HIVE FELL"
+        if isEndless {
+            title.text = newBest ? "NEW BEST \u{00B7} WAVE \(result.wavesCleared)" : "SWARM OVERRAN THE HIVE"
+        } else {
+            title.text = cleared ? "HIVE SURVIVED" : "HIVE FELL"
+        }
         title.fontSize = Typography.title
-        title.fontColor = cleared ? Palette.gold : Palette.white
-        if !cleared { title.alpha = 0.9 }
+        title.fontColor = (cleared || newBest) ? Palette.gold : Palette.white
+        if !cleared && !newBest { title.alpha = 0.9 }
+        // Long endless titles shrink to fit the card width.
+        let maxWidth = viewSize.width - 48
+        if title.frame.width > maxWidth { title.fontSize = Typography.title * maxWidth / title.frame.width }
         title.verticalAlignmentMode = .center
         title.position = CGPoint(x: 0, y: 130)
         addChild(title)
 
         let reached = cleared ? result.totalWaves : result.wavesCleared + 1
         let sub = SKLabelNode(fontNamed: Typography.font)
-        sub.text = "Reached wave \(reached)"
+        if isEndless {
+            sub.text = "Survived \(result.wavesCleared) \(result.wavesCleared == 1 ? "wave" : "waves")"
+        } else {
+            sub.text = "Reached wave \(reached)"
+        }
         sub.fontSize = 14
         sub.fontColor = Palette.white
         sub.alpha = 0.7
@@ -44,11 +57,11 @@ final class EndOverlay: SKNode {
         addChild(coins)
 
         var y: CGFloat = -20
-        if cleared, let onContinue = onContinue {
+        if cleared, !isEndless, let onContinue = onContinue {
             add(Button(title: "CONTINUE", name: "continue", style: .filled), at: y, action: onContinue)
             y -= 66
         }
-        add(Button(title: cleared ? "PLAY AGAIN" : "RETRY", name: "retry", style: .outlined), at: y, action: onRetry)
+        add(Button(title: (cleared && !isEndless) ? "PLAY AGAIN" : "RETRY", name: "retry", style: .outlined), at: y, action: onRetry)
         y -= 66
         add(Button(title: "HOME", name: "home", style: .outlined), at: y, action: onHome)
     }

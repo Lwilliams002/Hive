@@ -72,7 +72,7 @@ final class HomeScene: SKScene {
         addChild(level)
 
         play.isEnabled = !flow.levels.availableLevelIDs().isEmpty
-        endless.isEnabled = false
+        endless.isEnabled = flow.state.endlessUnlocked
         let pitch: CGFloat = 52 + 16
         // Keep at least 20 pt between the level label's centre and PLAY's top edge on shorter screens.
         var y = min(-h * 0.12, level.position.y - 20 - 26)
@@ -83,7 +83,13 @@ final class HomeScene: SKScene {
         }
 
         let sub = SKLabelNode(fontNamed: Typography.font)
-        sub.text = "Unlocks after level 10"
+        if !flow.state.endlessUnlocked {
+            sub.text = "Unlocks after level 10"
+        } else if flow.state.bestEndlessWave > 0 {
+            sub.text = "Best: wave \(flow.state.bestEndlessWave)"
+        } else {
+            sub.text = "Survive as long as you can"
+        }
         sub.fontSize = 11
         sub.fontColor = Palette.white
         sub.alpha = 0.6
@@ -102,6 +108,9 @@ final class HomeScene: SKScene {
         } else if levels.contains(p) {
             didStart = true
             flow.showLevelSelect()
+        } else if endless.isEnabled && endless.contains(p) {
+            didStart = true
+            flow.startEndless()
         } else if upgrades.contains(p) {
             didStart = true
             flow.showUpgrades()

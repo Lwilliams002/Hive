@@ -14,8 +14,10 @@ extension PauseOverlay: Overlay {}
 
 final class GameScene: SKScene {
     private unowned let flow: AppFlow
-    private let level: LevelDefinition
-    private let levelId: Int
+    private let mode: RunMode
+    private let provider: WaveProvider
+    /// Best endless wave when the scene started; the baseline for "NEW BEST" and the HUD.
+    private let previousBest: Int
     private let stats: HiveStats
     private let cardPool: [UpgradeCard]
     private let startingCardPool: [UpgradeCard]
@@ -38,10 +40,17 @@ final class GameScene: SKScene {
     /// Game-level pause (distinct from `SKNode.isPaused`, which would also stop overlay rendering/actions).
     private var isGamePaused = false
 
-    init(level: LevelDefinition, levelId: Int, stats: HiveStats, cardPool: [UpgradeCard],
+    convenience init(level: LevelDefinition, levelId: Int, stats: HiveStats, cardPool: [UpgradeCard],
+                     startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
+        self.init(mode: .story(levelId: levelId), provider: .fixed(level), stats: stats, cardPool: cardPool,
+                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, flow: flow, size: size)
+    }
+
+    init(mode: RunMode, provider: WaveProvider, stats: HiveStats, cardPool: [UpgradeCard],
          startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
-        self.level = level
-        self.levelId = levelId
+        self.mode = mode
+        self.provider = provider
+        self.previousBest = flow.state.bestEndlessWave
         self.stats = stats
         self.cardPool = cardPool
         self.startingCardPool = startingCardPool
@@ -110,7 +119,7 @@ final class GameScene: SKScene {
         }
         if inProgress && lastReportedRunID != world.runID {
             lastReportedRunID = world.runID
-            flow.runEnded(flow.makeRunResult(world: world, levelId: levelId))
+            flow.runEnded(flow.makeRunResult(world: world, mode: mode))
         }
         flow.showHome()
     }
@@ -130,8 +139,8 @@ final class GameScene: SKScene {
         overlay?.removeFromParent()
         overlay = nil
         isGamePaused = false
-        world = World(level: level, hiveStats: stats, cardPool: cardPool,
-                      startingCardCount: startingCardCount, startingCardPool: startingCardPool,
+        world = World(provider: provider, hiveStats: stats, cardPool: cardPool,
+                      startingCardPool: startingCardPool, startingCardCount: startingCardCount,
                       seed: UInt64(Date().timeIntervalSince1970 * 1000))
         lastUpdate = nil
         showStartingCards(world.startingCards)
@@ -215,12 +224,16 @@ final class GameScene: SKScene {
         case .cleared, .gameOver:
             guard lastReportedRunID != world.runID else { return }
             lastReportedRunID = world.runID
-            let result = flow.makeRunResult(world: world, levelId: levelId)
+            let result = flow.makeRunResult(world: world, mode: mode)
             flow.runEnded(result)
-            let nextId = levelId + 1
-            let hasNext = flow.levels.availableLevelIDs().contains(nextId)
-            let onContinue: (() -> Void)? = hasNext ? { [weak self] in self?.flow.startLevel(id: nextId) } : nil
-            let o = EndOverlay(result: result, viewSize: size, onContinue: onContinue,
+            var onContinue: (() -> Void)?
+            if case .story(let levelId) = mode {
+                let nextId = levelId + 1
+                if flow.levels.availableLevelIDs().contains(nextId) {
+                    onContinue = { [weak self] in self?.flow.startLevel(id: nextId) }
+                }
+            }
+            let o = EndOverlay(result: result, previousBest: previousBest, viewSize: size, onContinue: onContinue,
                                onRetry: { [weak self] in self?.startRun() },
                                onHome: { [weak self] in self?.flow.showHome() })
             overlay = o
@@ -252,14 +265,26 @@ final class GameScene: SKScene {
             }
         }
         reconcile()
+        let pending: Int
+        let totalWaves: Int?
+        let best: Int?
+        switch mode {
+        case .story(let levelId):
+            pending = CoinRules.coins(levelId: levelId, wavesCleared: max(0, world.director.waveNumber - 1),
+                                      cleared: false, multiplier: flow.state.upgrades.coinMultiplier)
+            totalWaves = world.director.totalWaves
+            best = nil
+        case .endless:
+            pending = CoinRules.endlessCoins(wavesCleared: world.wavesCleared,
+                                             multiplier: flow.state.upgrades.coinMultiplier)
+            totalWaves = nil   // Int.max for endless; never shown
+            best = previousBest
+        }
         hud.update(hp: world.hive.hp, maxHP: world.hive.stats.maxHP,
-                   wave: world.director.waveNumber, totalWaves: world.director.totalWaves,
+                   wave: world.director.waveNumber, totalWaves: totalWaves, best: best,
                    isBoss: world.director.isBossWave,
                    nectar: world.nectar.current, nectarThreshold: world.nectar.threshold,
-                   coinsPending: CoinRules.coins(levelId: levelId,
-                                                 wavesCleared: max(0, world.director.waveNumber - 1),
-                                                 cleared: false,
-                                                 multiplier: flow.state.upgrades.coinMultiplier))
+                   coinsPending: pending)
         presentOverlayIfNeeded()
     }
 

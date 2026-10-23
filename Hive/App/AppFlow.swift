@@ -62,9 +62,34 @@ final class AppFlow {
         present(scene)
     }
 
+    func startEndless() {
+        guard state.endlessUnlocked else {
+            showHome()
+            return
+        }
+        let startingPool = UpgradeCatalog.milestone1.filter { !$0.effect.isHealOnly }
+        let scene = GameScene(mode: .endless, provider: .endless(EndlessConfig()),
+                              stats: state.upgrades.hiveStats(),
+                              cardPool: UpgradeCatalog.milestone1,
+                              startingCardPool: startingPool,
+                              startingCardCount: state.upgrades.startingCardCount,
+                              flow: self, size: view.bounds.size)
+        present(scene)
+    }
+
     /// Builds the run's result. Any phase other than `.cleared` (game over, or a run abandoned mid-play or
     /// mid-card-pick from the pause menu) counts as not cleared.
-    func makeRunResult(world: World, levelId: Int) -> RunResult {
+    func makeRunResult(world: World, mode: RunMode) -> RunResult {
+        let levelId: Int
+        switch mode {
+        case .endless:
+            let n = world.wavesCleared
+            return RunResult.endless(runID: world.runID, wavesCleared: n,
+                                     coinsEarned: CoinRules.endlessCoins(wavesCleared: n,
+                                                                         multiplier: state.upgrades.coinMultiplier))
+        case .story(let id):
+            levelId = id
+        }
         let cleared = world.phase == .cleared
         let totalWaves = world.director.totalWaves
         let wavesCleared = cleared ? totalWaves : max(0, world.director.waveNumber - 1)
