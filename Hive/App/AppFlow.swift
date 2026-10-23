@@ -14,6 +14,12 @@ final class AppFlow {
         self.levels = levels
     }
 
+    /// The level PLAY starts: the next uncleared level, capped at the highest level that ships.
+    var playableLevel: Int { min(state.currentLevel, levels.availableLevelIDs().max() ?? 1) }
+
+    /// True once every shipped level has been cleared.
+    var allLevelsCleared: Bool { state.highestClearedLevel >= (levels.availableLevelIDs().max() ?? 0) }
+
     /// Loads the save (a corrupt file has already been moved aside by the store) and shows home.
     func start() {
         do {
@@ -22,6 +28,13 @@ final class AppFlow {
             print("Hive: save unreadable, starting fresh: \(error)")
             state = GameState()
         }
+        #if DEBUG
+        // Screenshot hook: open a screen directly on devices where taps cannot be scripted.
+        if ProcessInfo.processInfo.environment["HIVE_START_SCENE"] == "upgrades" {
+            showUpgrades()
+            return
+        }
+        #endif
         showHome()
     }
 
@@ -38,14 +51,19 @@ final class AppFlow {
             showHome()
             return
         }
+        // Starting cards are applied at full HP, so heal-only cards would be wasted.
+        let startingPool = UpgradeCatalog.milestone1.filter { !$0.effect.isHealOnly }
         let scene = GameScene(level: level, levelId: id,
                               stats: state.upgrades.hiveStats(),
                               cardPool: UpgradeCatalog.milestone1,
+                              startingCardPool: startingPool,
                               startingCardCount: state.upgrades.startingCardCount,
                               flow: self, size: view.bounds.size)
         present(scene)
     }
 
+    /// Builds the run's result. Any phase other than `.cleared` (game over, or a run abandoned mid-play or
+    /// mid-card-pick from the pause menu) counts as not cleared.
     func makeRunResult(world: World, levelId: Int) -> RunResult {
         let cleared = world.phase == .cleared
         let totalWaves = world.director.totalWaves

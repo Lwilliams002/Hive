@@ -49,14 +49,16 @@ enum HiveRenderer {
             }
         }
 
-        if tier >= 5 {
-            hive.addChild(wall(circumradius: 6.8 * r, color: Palette.burntOrange.withAlphaComponent(0.9), width: 3))
+        if tier >= innerWall.minTier {
+            hive.addChild(wall(circumradius: innerWall.circumradius, color: Palette.burntOrange.withAlphaComponent(0.9),
+                               width: innerWall.width))
         }
         if tier >= 8 {
             hive.addChild(honeyChannels())
         }
-        if tier >= 9 {
-            hive.addChild(wall(circumradius: 7.6 * r, color: Palette.gold.withAlphaComponent(0.6), width: 2))
+        if tier >= outerWall.minTier {
+            hive.addChild(wall(circumradius: outerWall.circumradius, color: Palette.gold.withAlphaComponent(0.6),
+                               width: outerWall.width))
         }
         if queen {
             hive.addChild(queenChamber())
@@ -65,6 +67,31 @@ enum HiveRenderer {
             hive.addChild(crown())
         }
         return hive
+    }
+
+    /// Wall geometry shared by `makeHive` and `combRadius`.
+    private static let innerWall = (circumradius: 6.8 * cellRadius, width: CGFloat(3), minTier: 5)
+    private static let outerWall = (circumradius: 7.6 * cellRadius, width: CGFloat(2), minTier: 9)
+
+    /// Outer extent from the hive centre of the drawn structure at a tier: the farthest cell vertex, or the
+    /// outer edge of a wall stroke when one is present. Excludes the ambient glow, which may overhang.
+    static func combRadius(visualTier: Int) -> CGFloat {
+        let tier = min(max(visualTier, 1), maxTier)
+        let r = cellRadius
+        var extent = r   // centre cell (or the smaller-than-ring-1 queen chamber)
+        for k in 1...3 {
+            for (i, hex) in ring(k).enumerated() where includes(ring: k, index: i, tier: tier) {
+                let c = pixel(hex)
+                for j in 0..<6 {   // pointy-top vertices at 30° + 60°·j
+                    let a = CGFloat.pi / 6 + CGFloat(j) * .pi / 3
+                    extent = max(extent, hypot(c.x + r * cos(a), c.y + r * sin(a)))
+                }
+            }
+        }
+        for wall in [innerWall, outerWall] where tier >= wall.minTier {
+            extent = max(extent, wall.circumradius + wall.width / 2)
+        }
+        return extent
     }
 
     // MARK: - Hex math

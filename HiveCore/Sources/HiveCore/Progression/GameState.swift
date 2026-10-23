@@ -23,6 +23,21 @@ public struct GameState: Codable, Equatable {
         self.recordedRunIDs = recordedRunIDs
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case version, coins, upgrades, highestClearedLevel, recordedRunIDs
+    }
+
+    /// Tolerant decode: every field is optional with a default, so saves written before a field
+    /// existed (or by a future build that dropped one) still load.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(version: try c.decodeIfPresent(Int.self, forKey: .version) ?? 1,
+                  coins: try c.decodeIfPresent(Int.self, forKey: .coins) ?? 0,
+                  upgrades: try c.decodeIfPresent(PermanentUpgrades.self, forKey: .upgrades) ?? PermanentUpgrades(),
+                  highestClearedLevel: try c.decodeIfPresent(Int.self, forKey: .highestClearedLevel) ?? 0,
+                  recordedRunIDs: try c.decodeIfPresent([UUID].self, forKey: .recordedRunIDs) ?? [])
+    }
+
     public var currentLevel: Int { highestClearedLevel + 1 }
 
     public func canAfford(_ track: UpgradeTrack) -> Bool {

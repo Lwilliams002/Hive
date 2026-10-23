@@ -13,6 +13,17 @@ public enum CardEffect: Equatable {
     case healFraction(Double)
 }
 
+extension CardEffect {
+    /// Effects that only add or restore HP. At run start the hive is at full health, so these are
+    /// excluded from starting-card draws (a heal would be wasted).
+    public var isHealOnly: Bool {
+        switch self {
+        case .healFraction, .addMaxHP: return true
+        case .fireRateMultiplier, .damageMultiplier, .addProjectile, .addPierce: return false
+        }
+    }
+}
+
 public struct UpgradeCard: Identifiable, Equatable {
     public let id: String
     public let name: String

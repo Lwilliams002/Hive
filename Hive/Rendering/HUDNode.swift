@@ -74,7 +74,7 @@ final class HUDNode: SKNode {
         hpFill.size.width = hpWidth * hpFrac
         hpFill.color = hpFrac < 0.25 ? Palette.white : Palette.gold
 
-        coinsLabel.text = "\u{25C6} \(coinsPending)"
+        coinsLabel.text = "+\(coinsPending) \u{25C6}"
         waveLabel.text = isBoss ? "BOSS" : "WAVE \(wave) / \(totalWaves)"
 
         let nFrac = nectarThreshold > 0 ? CGFloat(max(0, min(1, Double(nectar) / Double(nectarThreshold)))) : 0

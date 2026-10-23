@@ -41,7 +41,17 @@ public struct PermanentUpgrades: Codable, Equatable {
 
     public var totalTiers: Int { UpgradeTrack.allCases.reduce(0) { $0 + tier(of: $1) } }
 
-    public var visualTier: Int { 1 + totalTiers / 5 }
+    /// Permanent tiers bought per visual-tier step of the hive.
+    public static let tiersPerLook = 5
+
+    public var visualTier: Int { 1 + totalTiers / PermanentUpgrades.tiersPerLook }
+
+    /// Tiers still to buy before the hive's look changes; 0 once the final look (visual tier 11) is reached.
+    public var tiersToNextLook: Int {
+        let lastLook = 1 + UpgradeTrack.allCases.count * PermanentUpgrades.maxTier / PermanentUpgrades.tiersPerLook
+        guard visualTier < lastLook else { return 0 }
+        return PermanentUpgrades.tiersPerLook - totalTiers % PermanentUpgrades.tiersPerLook
+    }
 
     public static func cost(forTier t: Int) -> Int { 20 + 30 * t * t }
 

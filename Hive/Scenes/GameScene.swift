@@ -18,6 +18,7 @@ final class GameScene: SKScene {
     private let levelId: Int
     private let stats: HiveStats
     private let cardPool: [UpgradeCard]
+    private let startingCardPool: [UpgradeCard]
     private let startingCardCount: Int
     /// The run whose result has already been reported; guards against double-recording.
     private var lastReportedRunID: UUID?
@@ -27,16 +28,18 @@ final class GameScene: SKScene {
     private var projectileNodes: [Int: ProjectileNode] = [:]
     private var lastUpdate: TimeInterval?
     private var hud: HUDNode!
+    private var startingBanner: SKNode?
     private var overlay: Overlay?
     /// Game-level pause (distinct from `SKNode.isPaused`, which would also stop overlay rendering/actions).
     private var isGamePaused = false
 
     init(level: LevelDefinition, levelId: Int, stats: HiveStats, cardPool: [UpgradeCard],
-         startingCardCount: Int, flow: AppFlow, size: CGSize) {
+         startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
         self.level = level
         self.levelId = levelId
         self.stats = stats
         self.cardPool = cardPool
+        self.startingCardPool = startingCardPool
         self.startingCardCount = startingCardCount
         self.flow = flow
         super.init(size: size)
@@ -49,7 +52,11 @@ final class GameScene: SKScene {
         backgroundColor = Palette.background
 
         if hud == nil {
-            addChild(HiveRenderer.makeHive(visualTier: flow.state.upgrades.visualTier))
+            let tier = flow.state.upgrades.visualTier
+            let hive = HiveRenderer.makeHive(visualTier: tier)
+            // Keep the drawn comb within a few points of the contact radius (the glow may overhang).
+            hive.setScale(min(1, (CGFloat(Hive.radius) + 4) / HiveRenderer.combRadius(visualTier: tier)))
+            addChild(hive)
             hud = HUDNode(viewSize: size)
             addChild(hud)
             startRun()
@@ -75,14 +82,32 @@ final class GameScene: SKScene {
     private func pauseGame() {
         guard world != nil, world.phase == .playing, overlay == nil, !isGamePaused else { return }
         isGamePaused = true
-        let o = PauseOverlay(viewSize: size) { [weak self] in
+        let o = PauseOverlay(viewSize: size, onResume: { [weak self] in
             guard let self = self else { return }
             self.isGamePaused = false
             self.overlay = nil
             self.lastUpdate = nil
-        }
+        }, onRetry: { [weak self] in
+            self?.startRun()
+        }, onHome: { [weak self] in
+            self?.abandonRunAndGoHome()
+        })
         overlay = o
         addChild(o)
+    }
+
+    /// Leaves an unfinished run from the pause menu: pays it out as a loss (once per run), then goes home.
+    private func abandonRunAndGoHome() {
+        let inProgress: Bool
+        switch world.phase {
+        case .playing, .pickingCards: inProgress = true
+        case .cleared, .gameOver: inProgress = false
+        }
+        if inProgress && lastReportedRunID != world.runID {
+            lastReportedRunID = world.runID
+            flow.runEnded(flow.makeRunResult(world: world, levelId: levelId))
+        }
+        flow.showHome()
     }
 
     private func startRun() {
@@ -94,9 +119,41 @@ final class GameScene: SKScene {
         overlay = nil
         isGamePaused = false
         world = World(level: level, hiveStats: stats, cardPool: cardPool,
-                      startingCardCount: startingCardCount,
+                      startingCardCount: startingCardCount, startingCardPool: startingCardPool,
                       seed: UInt64(Date().timeIntervalSince1970 * 1000))
         lastUpdate = nil
+        showStartingCards(world.startingCards)
+    }
+
+    /// Briefly names the queen's starting cards: shown 1.2 s, then a 0.3 s fade.
+    private func showStartingCards(_ cards: [UpgradeCard]) {
+        startingBanner?.removeFromParent()
+        startingBanner = nil
+        guard !cards.isEmpty else { return }
+        let banner = SKNode()
+        banner.position = CGPoint(x: 0, y: size.height / 4)
+        banner.zPosition = 90
+
+        let caption = SKLabelNode(fontNamed: Typography.font)
+        caption.text = "STARTING CARDS"
+        caption.fontSize = 11
+        caption.fontColor = Palette.gold
+        caption.alpha = 0.7
+        caption.verticalAlignmentMode = .center
+        caption.position = CGPoint(x: 0, y: 12)
+        banner.addChild(caption)
+
+        let names = SKLabelNode(fontNamed: Typography.font)
+        names.text = cards.map(\.name).joined(separator: " \u{00B7} ")
+        names.fontSize = 15
+        names.fontColor = Palette.white
+        names.verticalAlignmentMode = .center
+        names.position = CGPoint(x: 0, y: -8)
+        banner.addChild(names)
+
+        banner.run(.sequence([.wait(forDuration: 1.2), .fadeOut(withDuration: 0.3), .removeFromParent()]))
+        addChild(banner)
+        startingBanner = banner
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {

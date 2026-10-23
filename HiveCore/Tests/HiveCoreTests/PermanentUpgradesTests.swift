@@ -68,6 +68,20 @@ final class PermanentUpgradesTests: XCTestCase {
         XCTAssertEqual(PermanentUpgrades(tiers: [.comb: 5]).visualTier, 2)
     }
 
+    func testTiersToNextLook() {
+        XCTAssertEqual(PermanentUpgrades().tiersToNextLook, 5)
+        XCTAssertEqual(PermanentUpgrades(tiers: [.comb: 3]).tiersToNextLook, 2)
+        XCTAssertEqual(PermanentUpgrades(tiers: [.comb: 5]).tiersToNextLook, 5)
+        var all = [UpgradeTrack: Int]()
+        for t in UpgradeTrack.allCases { all[t] = 10 }
+        XCTAssertEqual(PermanentUpgrades(tiers: all).tiersToNextLook, 0)
+        all[.queen] = 9
+        XCTAssertEqual(PermanentUpgrades(tiers: all).tiersToNextLook, 1)
+        XCTAssertTrue(CardEffect.healFraction(0.5).isHealOnly)
+        XCTAssertTrue(CardEffect.addMaxHP(30, healBy: 30).isHealOnly)
+        XCTAssertFalse(CardEffect.damageMultiplier(1.3).isHealOnly)
+    }
+
     func testEffectDescriptions() {
         let u = PermanentUpgrades()
         XCTAssertEqual(u.effectDescription(for: .comb, atTier: 3), "HP 145")

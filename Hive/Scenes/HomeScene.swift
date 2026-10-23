@@ -54,24 +54,28 @@ final class HomeScene: SKScene {
         #endif
         let hive = HiveRenderer.makeHive(visualTier: tier)
         hive.position = CGPoint(x: 0, y: h * 0.14)
-        let scale: CGFloat = tier <= 4 ? 1.8 : (tier <= 8 ? 1.4 : 1.1)
+        // Grow small hives up to 1.9×, but keep the drawn structure within 170 pt of the centre, so on-screen
+        // size never shrinks as the tier rises (tier 11 ≈ 340 pt wide).
+        let combRadius = HiveRenderer.combRadius(visualTier: tier)
+        let scale = max(1, min(1.9, 170 / combRadius))
         hive.setScale(scale)
         hive.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 240)))
         addChild(hive)
 
         let level = SKLabelNode(fontNamed: Typography.font)
-        level.text = "LEVEL \(flow.state.currentLevel)"
+        level.text = flow.allLevelsCleared ? "ALL LEVELS CLEARED" : "LEVEL \(flow.playableLevel)"
         level.fontSize = 14
         level.fontColor = Palette.gold
         level.alpha = 0.8
         level.verticalAlignmentMode = .center
-        level.position = CGPoint(x: 0, y: h * 0.14 - (80 * scale + 24))
+        level.position = CGPoint(x: 0, y: h * 0.14 - (combRadius * scale + 28))
         addChild(level)
 
         play.isEnabled = !flow.levels.availableLevelIDs().isEmpty
         endless.isEnabled = false
         let pitch: CGFloat = 52 + 16
-        var y = -h * 0.12
+        // Keep at least 20 pt between the level label's centre and PLAY's top edge on shorter screens.
+        var y = min(-h * 0.12, level.position.y - 20 - 26)
         for button in [play, levels, upgrades, endless] {
             button.position = CGPoint(x: 0, y: y)
             addChild(button)
@@ -92,9 +96,9 @@ final class HomeScene: SKScene {
         guard !didStart, let touch = touches.first else { return }
         let p = touch.location(in: self)
         if play.contains(p) {
-            guard let maxID = flow.levels.availableLevelIDs().max() else { return }
+            guard !flow.levels.availableLevelIDs().isEmpty else { return }
             didStart = true
-            flow.startLevel(id: min(flow.state.currentLevel, maxID))
+            flow.startLevel(id: flow.playableLevel)
         } else if levels.contains(p) {
             didStart = true
             flow.showLevelSelect()

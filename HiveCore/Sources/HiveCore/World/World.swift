@@ -31,14 +31,14 @@ public struct World {
 
     public init(level: LevelDefinition, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
-                startingCardCount: Int = 0, seed: UInt64) {
+                startingCardCount: Int = 0, startingCardPool: [UpgradeCard]? = nil, seed: UInt64) {
         self.level = level
         self.cardPool = cardPool
         self.runID = UUID()
         self.director = WaveDirector(level: level)
         self.hive = Hive(stats: hiveStats, hp: hiveStats.maxHP, cooldown: 0)
         self.rng = SeededRNG(seed: seed)
-        let drawn = UpgradeCatalog.draw(count: startingCardCount, from: cardPool, rng: &rng)
+        let drawn = UpgradeCatalog.draw(count: startingCardCount, from: startingCardPool ?? cardPool, rng: &rng)
         for card in drawn { apply(card: card) }
         self.startingCards = drawn
     }

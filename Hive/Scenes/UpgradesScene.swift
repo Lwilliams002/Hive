@@ -12,7 +12,21 @@ final class UpgradesScene: SKScene {
     private var buyButtons: [(track: UpgradeTrack, button: Button)] = []
     private var shownTier = 1
     private var didLeave = false
+    /// Time of the last purchase; buy taps within `buyDebounce` of it are ignored.
+    private var lastPurchaseTime: TimeInterval = -.infinity
+    private static let buyDebounce: TimeInterval = 0.25
     private var homeX: CGFloat { size.width / 2 - 24 }
+
+    // Layout, computed top-down from constraints (see `layout()`).
+    private static let rowHeight: CGFloat = 64
+    private static let rowGap: CGFloat = 10
+    private static let rowsBottomInset: CGFloat = 56
+    private static let tierLabelGap: CGFloat = 16
+    /// Bottom of the BACK / balance bar, measured down from the top edge.
+    private static let topBarInset: CGFloat = 84
+    private var rowsTop: CGFloat = 0
+    private var hiveCenterY: CGFloat = 0
+    private var hiveScale: CGFloat = 1
 
     private static let formatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -48,9 +62,9 @@ final class UpgradesScene: SKScene {
         tierLabel.fontSize = 12
         tierLabel.fontColor = Palette.gold
         tierLabel.alpha = 0.7
-        tierLabel.verticalAlignmentMode = .center
-        tierLabel.position = CGPoint(x: 0, y: h / 2 - 190 - 104)
+        tierLabel.verticalAlignmentMode = .bottom
         addChild(tierLabel)
+        layout()
 
         shownTier = flow.state.upgrades.visualTier
         rebuildHive()
@@ -60,9 +74,27 @@ final class UpgradesScene: SKScene {
     private func rebuildHive() {
         hive?.removeFromParent()
         let node = HiveRenderer.makeHive(visualTier: flow.state.upgrades.visualTier)
-        node.position = CGPoint(x: 0, y: size.height / 2 - 190)
+        node.position = CGPoint(x: 0, y: hiveCenterY)
+        node.setScale(hiveScale)
         addChild(node)
         hive = node
+    }
+
+    /// Rows block bottom-anchored; tier label just above it; the hive preview centred in the space between
+    /// the tier label and the top bar, scaled so the largest (tier-11) hive plus some glow always fits.
+    private func layout() {
+        let h = size.height
+        let rowsHeight = 5 * Self.rowHeight + 4 * Self.rowGap
+        rowsTop = -h / 2 + Self.rowsBottomInset + rowsHeight
+        tierLabel.position = CGPoint(x: 0, y: rowsTop + Self.tierLabelGap)
+        // Measure with sample text: the label's height does not depend on its content.
+        tierLabel.text = "TIER 1"
+        let labelTop = tierLabel.frame.maxY
+        let barBottom = h / 2 - Self.topBarInset
+        let space = barBottom - labelTop
+        hiveCenterY = (barBottom + labelTop) / 2
+        let needed = 2 * HiveRenderer.combRadius(visualTier: HiveRenderer.maxTier) + 40
+        hiveScale = max(0.1, min(1, (space - 24) / needed))
     }
 
     private func refresh() {
@@ -73,8 +105,8 @@ final class UpgradesScene: SKScene {
         let up = state.upgrades
         let v = up.visualTier
         var text = "TIER \(v) / \(HiveRenderer.maxTier)"
-        if v < HiveRenderer.maxTier {
-            let n = 5 - up.totalTiers % 5
+        let n = up.tiersToNextLook
+        if n > 0 {
             text += " \u{00B7} next look at \(n) more tier\(n == 1 ? "" : "s")"
         }
         tierLabel.text = text
@@ -82,11 +114,9 @@ final class UpgradesScene: SKScene {
         rows.removeFromParent()
         rows = SKNode()
         buyButtons = []
-        let h = size.height
-        let topEdge = max(h / 2 - 440, -h / 2 + 56 + 5 * 64 + 4 * 10)
         for (i, track) in UpgradeTrack.allCases.enumerated() {
             let row = makeRow(track: track, state: state)
-            row.position = CGPoint(x: 0, y: topEdge - 32 - CGFloat(i) * 74)
+            row.position = CGPoint(x: 0, y: rowsTop - Self.rowHeight / 2 - CGFloat(i) * (Self.rowHeight + Self.rowGap))
             rows.addChild(row)
             let pos = CGPoint(x: 126, y: row.position.y)
             let size = CGSize(width: 96, height: 36)
@@ -160,15 +190,18 @@ final class UpgradesScene: SKScene {
         guard let hit = buyButtons.first(where: {
             abs(p.x - $0.button.position.x) <= 48 && abs(p.y - $0.button.position.y) <= 18
         }) else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastPurchaseTime >= Self.buyDebounce else { return }
         if flow.state.canAfford(hit.track), flow.purchase(hit.track) {
+            lastPurchaseTime = now
             let newTier = flow.state.upgrades.visualTier
             refresh()
             if newTier != shownTier {
                 shownTier = newTier
                 rebuildHive()
                 hive?.run(.sequence([
-                    .scale(to: 1.12, duration: 0.12),
-                    .scale(to: 1.0, duration: 0.13),
+                    .scale(to: hiveScale * 1.12, duration: 0.12),
+                    .scale(to: hiveScale, duration: 0.13),
                 ]))
             }
         } else {

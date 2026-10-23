@@ -18,7 +18,7 @@ public final class InMemorySaveStore: SaveStore {
 }
 
 public final class FileSaveStore: SaveStore {
-    private struct VersionProbe: Decodable { let version: Int }
+    private struct VersionProbe: Decodable { let version: Int? }
 
     private let directory: URL
     private let fileName: String
@@ -37,8 +37,9 @@ public final class FileSaveStore: SaveStore {
         do { data = try Data(contentsOf: fileURL) } catch { throw SaveError.io(error) }
 
         let decoder = JSONDecoder()
+        // A missing version means v1 (matches GameState's decode default); < 1 or newer than this build is corrupt.
         if let probe = try? decoder.decode(VersionProbe.self, from: data),
-           probe.version <= GameState.currentVersion,
+           (1...GameState.currentVersion).contains(probe.version ?? 1),
            let state = try? decoder.decode(GameState.self, from: data) {
             return state
         }

@@ -32,4 +32,9 @@ final class WorldStartingCardsTests: XCTestCase {
         let w = World(level: tenWasps(), cardPool: [card("venom"), card("piercing")], startingCardCount: 3, seed: 1)
         XCTAssertEqual(w.startingCards.count, 2)
     }
+    func testStartingCardsUseStartingPool() {
+        let w = World(level: tenWasps(), cardPool: UpgradeCatalog.milestone1,
+                      startingCardCount: 1, startingCardPool: [card("venom")], seed: 1)
+        XCTAssertEqual(w.startingCards, [card("venom")])
+    }
 }

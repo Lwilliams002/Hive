@@ -61,12 +61,12 @@ final class EndOverlay: SKNode {
         actions.append((button, action))
     }
 
-    /// `point` is in the overlay's coordinate space. Fires at most one action.
+    /// `point` is in the overlay's coordinate space. Fires at most one action. The overlay stays in place:
+    /// HOME/CONTINUE leave the scene under a fade that covers it, and RETRY's restart removes it.
     func handleTouch(at point: CGPoint) {
         guard !isDone, let hit = actions.first(where: { $0.0.contains(point) }) else { return }
         isDone = true
         actions.removeAll()
-        removeFromParent()
         hit.1()
     }
 }
