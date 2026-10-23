@@ -218,7 +218,8 @@ final class UpgradesScene: SKScene {
                     .scale(to: hiveScale, duration: 0.13),
                 ]))
             }
-        } else {
+        } else if flow.state.purchaseBlock(for: hit.track) == .cannotAfford {
+            // Only an unaffordable tier shakes the balance; a locked (or maxed) tier ignores the tap.
             shakeBalance()
         }
     }

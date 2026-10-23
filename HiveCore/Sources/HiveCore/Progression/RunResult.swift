@@ -50,7 +50,7 @@ public enum CoinRules {
 
     public static func endlessCoins(wavesCleared n: Int, multiplier: Double) -> Int {
         guard n > 0 else { return 0 }
-        let base = (1...n).reduce(0) { $0 + 10 + 3 * $1 }
+        let base = (1...n).reduce(0) { $0 + 12 + 6 * $1 }
         return Int((Double(base) * multiplier).rounded())
     }
 }

@@ -6,7 +6,7 @@ final class ProjectileNode: SKShapeNode {
         path = CGPath(ellipseIn: CGRect(x: -4, y: -4, width: 8, height: 8), transform: nil)
         fillColor = Palette.white
         strokeColor = .clear
-        glowWidth = 4
+        glowWidth = 0
         alpha = 0.95
     }
 

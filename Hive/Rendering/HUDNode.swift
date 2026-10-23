@@ -77,12 +77,11 @@ final class HUDNode: SKNode {
         coinsLabel.text = "+\(coinsPending) \u{25C6}"
         if let totalWaves = totalWaves {
             waveLabel.text = isBoss ? "BOSS" : "WAVE \(wave) / \(totalWaves)"
-        } else if isBoss {
-            waveLabel.text = "BOSS \u{00B7} WAVE \(wave)"
-        } else if let best = best, best > 0 {
-            waveLabel.text = "WAVE \(wave) \u{00B7} BEST \(best)"
         } else {
-            waveLabel.text = "WAVE \(wave)"
+            // Endless: `wave` is the wave in progress, `best` the best number of waves cleared.
+            var text = isBoss ? "BOSS \u{00B7} WAVE \(wave)" : "WAVE \(wave)"
+            if let best = best, best > 0 { text += " \u{00B7} BEST \(best)" }
+            waveLabel.text = text
         }
 
         let nFrac = nectarThreshold > 0 ? CGFloat(max(0, min(1, Double(nectar) / Double(nectarThreshold)))) : 0

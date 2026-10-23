@@ -20,7 +20,8 @@ final class EndOverlay: SKNode {
         let newBest = isEndless && result.wavesCleared > previousBest
         let title = SKLabelNode(fontNamed: Typography.font)
         if isEndless {
-            title.text = newBest ? "NEW BEST \u{00B7} WAVE \(result.wavesCleared)" : "SWARM OVERRAN THE HIVE"
+            let n = result.wavesCleared
+            title.text = newBest ? "NEW BEST \u{00B7} \(n) \(n == 1 ? "WAVE" : "WAVES")" : "SWARM OVERRAN THE HIVE"
         } else {
             title.text = cleared ? "HIVE SURVIVED" : "HIVE FELL"
         }
@@ -37,7 +38,8 @@ final class EndOverlay: SKNode {
         let reached = cleared ? result.totalWaves : result.wavesCleared + 1
         let sub = SKLabelNode(fontNamed: Typography.font)
         if isEndless {
-            sub.text = "Survived \(result.wavesCleared) \(result.wavesCleared == 1 ? "wave" : "waves")"
+            let n = result.wavesCleared
+            sub.text = n == 0 ? "No waves cleared" : "Survived \(n) \(n == 1 ? "wave" : "waves")"
         } else {
             sub.text = "Reached wave \(reached)"
         }

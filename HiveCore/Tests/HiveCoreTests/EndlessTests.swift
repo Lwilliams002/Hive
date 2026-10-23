@@ -54,8 +54,8 @@ final class EndlessTests: XCTestCase {
     }
 
     func testEndlessCoins() {
-        XCTAssertEqual(CoinRules.endlessCoins(wavesCleared: 3, multiplier: 1.0), 48)
-        XCTAssertEqual(CoinRules.endlessCoins(wavesCleared: 3, multiplier: 1.5), 72)
+        XCTAssertEqual(CoinRules.endlessCoins(wavesCleared: 3, multiplier: 1.0), 72)
+        XCTAssertEqual(CoinRules.endlessCoins(wavesCleared: 3, multiplier: 1.5), 108)
         XCTAssertEqual(CoinRules.endlessCoins(wavesCleared: 0, multiplier: 1.5), 0)
     }
 

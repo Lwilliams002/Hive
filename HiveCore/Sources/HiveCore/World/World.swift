@@ -155,7 +155,8 @@ public struct World {
                     let center = mobs[m].position
                     for n in mobs.indices where n != m && !deadIDs.contains(mobs[n].id) {
                         guard mobs[n].position.distance(to: center) < modifiers.splashRadius else { continue }
-                        splashDamage(raw * modifiers.splashFraction, to: &mobs[n])
+                        // Armor can absorb the whole splash; such a graze neither flashes nor reports a hit.
+                        guard splashDamage(raw * modifiers.splashFraction, to: &mobs[n]) > 0 else { continue }
                         mobs[n].hitFlash = World.hitFlashDuration
                         events.append(.mobHit(id: mobs[n].id))
                         if mobs[n].hp <= 0 {
@@ -334,8 +335,12 @@ public struct World {
     }
 
     /// Splash damage to a neighbor: flat armor reduction with no minimum (armor can absorb it entirely).
-    private func splashDamage(_ raw: Double, to mob: inout Mob) {
-        mob.hp -= max(0, raw - mob.type.stats.armor)
+    /// Applies splash damage reduced by armor and returns the amount actually dealt (0 when fully absorbed).
+    @discardableResult
+    private func splashDamage(_ raw: Double, to mob: inout Mob) -> Double {
+        let applied = max(0, raw - mob.type.stats.armor)
+        mob.hp -= applied
+        return applied
     }
 
     /// Spawns `escort.count` mobs on the parent's bearing from the hive (each with its own ±15° jitter) at
@@ -379,6 +384,20 @@ public struct World {
             events.append(.projectileFired(id: p.id))
         }
     }
+
+    #if DEBUG
+    /// DEBUG-only stress hook for the app: spawns `count` mobs evenly spaced around the spawn radius at the
+    /// current wave's hp scale. Uses the id counter only (no rng), so it never perturbs the seeded stream.
+    public mutating func debugSpawnRing(type: MobType, count: Int) {
+        guard count > 0 else { return }
+        let hpScale = director.currentHpScale
+        for k in 0..<count {
+            let angle = Double(k) / Double(count) * 2 * .pi
+            mobs.append(Mob(id: makeID(), type: type,
+                            position: Vec2(cos(angle), sin(angle)) * World.spawnRadius, hpScale: hpScale))
+        }
+    }
+    #endif
 
     // MARK: - Test hooks (internal; reachable via @testable)
 

@@ -89,7 +89,7 @@ Unlocked when `highestClearedLevel >= 10`. It never clears; a run ends on game o
 | beetles (n >= 4) | n / 3 | 2.5 s |
 | boss (every 5th wave) | 1, cycling bear, hornetQueen, swarmMother | - |
 
-`hpScale = 1 + 0.06n`, 2.0 s between waves. Coins: sum over k = 1...n of (10 + 3k), times the coin multiplier.
+`hpScale = 1 + 0.06n`, 2.0 s between waves. Coins: sum over k = 1...n of (12 + 6k), times the coin multiplier.
 
 ## Level generator
 

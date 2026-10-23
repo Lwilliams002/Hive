@@ -86,7 +86,8 @@ final class HomeScene: SKScene {
         if !flow.state.endlessUnlocked {
             sub.text = "Unlocks after level 10"
         } else if flow.state.bestEndlessWave > 0 {
-            sub.text = "Best: wave \(flow.state.bestEndlessWave)"
+            let best = flow.state.bestEndlessWave
+            sub.text = "Best: \(best) \(best == 1 ? "wave" : "waves")"
         } else {
             sub.text = "Survive as long as you can"
         }

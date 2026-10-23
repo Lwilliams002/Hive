@@ -7,14 +7,11 @@ final class SlowFieldNode: SKNode {
     init(radius: CGFloat) {
         self.radius = radius
         super.init()
-        let spinner = SKNode()
         let disc = SKShapeNode(circleOfRadius: radius)
-        disc.fillColor = Palette.amber.withAlphaComponent(0.05)
+        disc.fillColor = Palette.amber.withAlphaComponent(0.03)
         disc.strokeColor = Palette.amber.withAlphaComponent(0.2)
         disc.lineWidth = 1
-        spinner.addChild(disc)
-        spinner.run(.repeatForever(.rotate(byAngle: 2 * .pi, duration: 20)))
-        addChild(spinner)
+        addChild(disc)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }

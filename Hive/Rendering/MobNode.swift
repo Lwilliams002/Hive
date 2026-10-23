@@ -4,6 +4,8 @@ import HiveCore
 final class MobNode: SKNode {
     private let shape: SKShapeNode
     private let baseColor: UIColor
+    /// Last flash state written to `shape.fillColor`; avoids re-tessellating the shape every frame.
+    private var isFlashing = false
 
     init(type: MobType) {
         switch type {
@@ -98,6 +100,8 @@ final class MobNode: SKNode {
     }
 
     func setHitFlash(_ on: Bool) {
+        guard on != isFlashing else { return }
+        isFlashing = on
         shape.fillColor = on ? Palette.white : baseColor
     }
 }

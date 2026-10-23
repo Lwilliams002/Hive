@@ -97,6 +97,30 @@ final class CardMechanicsTests: XCTestCase {
         XCTAssertEqual(w.mobs.map(\.hp), [10, 16, 16])
     }
 
+    func testSplashFractionCappedAtOne() {
+        var m = RunModifiers()
+        let pollen = card("pollen_cloud")
+        for _ in 0..<3 { m.apply(pollen.effect) }
+        XCTAssertEqual(m.splashFraction, 1.0, accuracy: 1e-12)
+        XCTAssertEqual(m.splashRadius, 45)
+    }
+
+    func testZeroDamageSplashDoesNotFlash() {
+        var w = World(level: emptyLevel(), hiveStats: silentHive, seed: 1)
+        w.debugApplyCard(card("pollen_cloud"))
+        w.debugAddMob(type: .wasp, position: Vec2(200, 0))
+        w.debugAddMob(type: .beetle, position: Vec2(200, 25))
+        let beetleID = w.mobs[1].id
+        w.debugAddProjectile(at: Vec2(200, 0), velocity: .zero, damage: 10)
+        let ev = w.tick(dt: 1.0 / 60)
+        // 0.4 * 10 = 4 <= beetle armor 5: the splash is fully absorbed.
+        let beetle = w.mobs.first { $0.id == beetleID }!
+        XCTAssertEqual(beetle.hp, MobType.beetle.stats.maxHP)
+        XCTAssertEqual(beetle.hitFlash, 0)
+        XCTAssertFalse(ev.contains(.mobHit(id: beetleID)))
+        XCTAssertTrue(ev.contains(.mobHit(id: w.mobs[0].id)))
+    }
+
     func testContactResistReducesHiveDamage() {
         var w = World(level: oneBearBossLevel(), hiveStats: silentHive, seed: 1)
         w.debugApplyCard(card("thick_wax"))

@@ -16,7 +16,8 @@ final class GameScene: SKScene {
     private unowned let flow: AppFlow
     private let mode: RunMode
     private let provider: WaveProvider
-    /// Best endless wave when the scene started; the baseline for "NEW BEST" and the HUD.
+    /// Best endless waves cleared before the current run began (refreshed in `startRun`, after any earlier
+    /// run was recorded); the baseline for "NEW BEST" and the HUD's `BEST`.
     private var previousBest: Int
     private let stats: HiveStats
     private let cardPool: [UpgradeCard]
@@ -102,26 +103,27 @@ final class GameScene: SKScene {
             self.overlay = nil
             self.lastUpdate = nil
         }, onRetry: { [weak self] in
-            self?.startRun()
+            guard let self = self else { return }
+            self.recordIfInProgress()
+            self.startRun()
         }, onHome: { [weak self] in
-            self?.abandonRunAndGoHome()
+            guard let self = self else { return }
+            self.recordIfInProgress()
+            self.flow.showHome()
         })
         overlay = o
         addChild(o)
     }
 
-    /// Leaves an unfinished run from the pause menu: pays it out as a loss (once per run), then goes home.
-    private func abandonRunAndGoHome() {
-        let inProgress: Bool
+    /// Pays out an unfinished run abandoned from the pause menu (HOME or RETRY) as a loss, once per run.
+    private func recordIfInProgress() {
         switch world.phase {
-        case .playing, .pickingCards: inProgress = true
-        case .cleared, .gameOver: inProgress = false
+        case .playing, .pickingCards: break
+        case .cleared, .gameOver: return
         }
-        if inProgress && lastReportedRunID != world.runID {
-            lastReportedRunID = world.runID
-            flow.runEnded(flow.makeRunResult(world: world, mode: mode))
-        }
-        flow.showHome()
+        guard lastReportedRunID != world.runID else { return }
+        lastReportedRunID = world.runID
+        flow.runEnded(flow.makeRunResult(world: world, mode: mode))
     }
 
     private func startRun() {
@@ -190,6 +192,14 @@ final class GameScene: SKScene {
         bossBanner = banner
     }
 
+    #if DEBUG
+    /// `HIVE_STRESS=N` (DEBUG builds only): N extra wasps ringed around the spawn radius when wave 1 starts.
+    private func applyStressHook() {
+        guard let raw = ProcessInfo.processInfo.environment["HIVE_STRESS"], let n = Int(raw), n > 0 else { return }
+        world.debugSpawnRing(type: .wasp, count: n)
+    }
+    #endif
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         if let overlay = overlay {
@@ -256,8 +266,11 @@ final class GameScene: SKScene {
         if !isGamePaused {
             for event in world.tick(dt: dt) {
                 switch event {
-                case .waveStarted(_, let isBoss) where isBoss:
-                    showBossBanner()
+                case .waveStarted(let number, let isBoss):
+                    #if DEBUG
+                    if number == 1 { applyStressHook() }
+                    #endif
+                    if isBoss { showBossBanner() }
                 case .beeHit(let mobID):
                     beeHitMobs.insert(mobID)
                 default:
@@ -266,6 +279,7 @@ final class GameScene: SKScene {
             }
         }
         reconcile()
+        bossBanner?.isPaused = (overlay != nil)
         let pending: Int
         let totalWaves: Int?
         let best: Int?

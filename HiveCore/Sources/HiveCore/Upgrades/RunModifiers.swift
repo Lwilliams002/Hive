@@ -25,7 +25,7 @@ public struct RunModifiers: Equatable {
             guardBeeCount += n
         case .splash(let radius, let fraction):
             splashRadius = max(splashRadius, radius)
-            splashFraction += fraction
+            splashFraction = min(1, splashFraction + fraction)
         case .royalGuard:
             guardBeeCount += 3
             beeDamage *= 2

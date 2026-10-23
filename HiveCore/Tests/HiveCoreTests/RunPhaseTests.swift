@@ -77,4 +77,19 @@ final class RunPhaseTests: XCTestCase {
         w.choose(second[0])
         XCTAssertEqual(w.phase, .playing)
     }
+    func testClearingCurrentWaveWithLaterWaveStillOpensPick() {
+        // Wave 1 is a lone bear; wave 2 waits 1000 s. Killing the bear empties wave 1 and crosses the first
+        // threshold (15 >= 8), but the level is not cleared, so the pick must still open.
+        let lvl = try! LevelDefinition.load(from: Data(#"{"id":9,"name":"t","waves":[{"delay":0,"spawns":[{"type":"bear","count":1,"interval":0}]},{"delay":1000,"spawns":[{"type":"wasp","count":1,"interval":0}]}]}"#.utf8))
+        var w = World(level: lvl, hiveStats: HiveStats(projectileCount: 0), seed: 2)
+        _ = w.tick(dt: 1.0/60)
+        XCTAssertEqual(w.mobs.count, 1)
+        XCTAssertFalse(w.director.allSpawnsIssued)
+        w.debugSetMob(index: 0, position: Vec2(200, 0), hp: 1)
+        w.debugAddProjectile(at: Vec2(200, 0), velocity: .zero, damage: 5)
+        let ev = w.tick(dt: 1.0/60)
+        XCTAssertTrue(w.mobs.isEmpty)
+        XCTAssertTrue(ev.contains(.nectarThreshold))
+        guard case .pickingCards = w.phase else { return XCTFail("expected pickingCards, got \(w.phase)") }
+    }
 }
