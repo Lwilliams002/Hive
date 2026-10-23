@@ -5,7 +5,15 @@
     {
       "delay": 1.5,
       "spawns": [
-        { "type": "wasp", "count": 20, "interval": 1.2 },
+        { "type": "wasp", "count": 17, "interval": 1.412 },
+        { "type": "hornet", "count": 4, "interval": 6.0 },
+        { "type": "beetle", "count": 1, "interval": 24.0 }
+      ]
+    },
+    {
+      "delay": 2.5,
+      "spawns": [
+        { "type": "wasp", "count": 19, "interval": 1.263 },
         { "type": "hornet", "count": 4, "interval": 6.0 },
         { "type": "beetle", "count": 1, "interval": 24.0 }
       ]
@@ -29,15 +37,7 @@
     {
       "delay": 2.5,
       "spawns": [
-        { "type": "wasp", "count": 26, "interval": 0.923 },
-        { "type": "hornet", "count": 6, "interval": 4.0 },
-        { "type": "beetle", "count": 2, "interval": 12.0 }
-      ]
-    },
-    {
-      "delay": 2.5,
-      "spawns": [
-        { "type": "wasp", "count": 28, "interval": 0.857 },
+        { "type": "wasp", "count": 27, "interval": 0.889 },
         { "type": "hornet", "count": 6, "interval": 4.0 },
         { "type": "beetle", "count": 2, "interval": 12.0 }
       ]

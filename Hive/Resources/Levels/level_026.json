@@ -4,43 +4,34 @@
   "waves": [
     {
       "delay": 1.5,
-      "hpScale": 2.1,
+      "hpScale": 2.415,
       "spawns": [
-        { "type": "wasp", "count": 42, "interval": 0.571 },
-        { "type": "hornet", "count": 14, "interval": 1.714 },
-        { "type": "beetle", "count": 9, "interval": 2.667 }
+        { "type": "wasp", "count": 41, "interval": 0.585 },
+        { "type": "hornet", "count": 13, "interval": 1.846 },
+        { "type": "beetle", "count": 8, "interval": 3.0 }
       ]
     },
     {
       "delay": 2.0,
-      "hpScale": 2.1,
+      "hpScale": 2.415,
       "spawns": [
-        { "type": "wasp", "count": 46, "interval": 0.522 },
+        { "type": "wasp", "count": 47, "interval": 0.511 },
         { "type": "hornet", "count": 15, "interval": 1.6 },
-        { "type": "beetle", "count": 9, "interval": 2.667 }
-      ]
-    },
-    {
-      "delay": 2.0,
-      "hpScale": 2.1,
-      "spawns": [
-        { "type": "wasp", "count": 50, "interval": 0.48 },
-        { "type": "hornet", "count": 16, "interval": 1.5 },
         { "type": "beetle", "count": 10, "interval": 2.4 }
       ]
     },
     {
       "delay": 2.0,
-      "hpScale": 2.1,
+      "hpScale": 2.415,
       "spawns": [
-        { "type": "wasp", "count": 54, "interval": 0.444 },
-        { "type": "hornet", "count": 18, "interval": 1.333 },
+        { "type": "wasp", "count": 52, "interval": 0.462 },
+        { "type": "hornet", "count": 17, "interval": 1.412 },
         { "type": "beetle", "count": 11, "interval": 2.182 }
       ]
     },
     {
       "delay": 2.0,
-      "hpScale": 2.1,
+      "hpScale": 2.415,
       "spawns": [
         { "type": "wasp", "count": 58, "interval": 0.414 },
         { "type": "hornet", "count": 19, "interval": 1.263 },
@@ -49,48 +40,57 @@
     },
     {
       "delay": 2.0,
-      "hpScale": 2.1,
+      "hpScale": 2.415,
       "spawns": [
-        { "type": "wasp", "count": 62, "interval": 0.387 },
-        { "type": "hornet", "count": 20, "interval": 1.2 },
+        { "type": "wasp", "count": 64, "interval": 0.375 },
+        { "type": "hornet", "count": 21, "interval": 1.143 },
         { "type": "beetle", "count": 13, "interval": 1.846 }
       ]
     },
     {
       "delay": 2.0,
-      "hpScale": 2.1,
+      "hpScale": 2.415,
       "spawns": [
-        { "type": "wasp", "count": 66, "interval": 0.364 },
-        { "type": "hornet", "count": 22, "interval": 1.091 },
-        { "type": "beetle", "count": 14, "interval": 1.714 }
-      ]
-    },
-    {
-      "delay": 2.0,
-      "hpScale": 2.1,
-      "spawns": [
-        { "type": "wasp", "count": 71, "interval": 0.338 },
+        { "type": "wasp", "count": 70, "interval": 0.343 },
         { "type": "hornet", "count": 23, "interval": 1.043 },
         { "type": "beetle", "count": 15, "interval": 1.6 }
       ]
     },
     {
       "delay": 2.0,
-      "hpScale": 2.1,
+      "hpScale": 2.415,
       "spawns": [
-        { "type": "wasp", "count": 75, "interval": 0.32 },
+        { "type": "wasp", "count": 76, "interval": 0.316 },
         { "type": "hornet", "count": 25, "interval": 0.96 },
         { "type": "beetle", "count": 16, "interval": 1.5 }
       ]
     },
     {
+      "delay": 2.0,
+      "hpScale": 2.415,
+      "spawns": [
+        { "type": "wasp", "count": 82, "interval": 0.293 },
+        { "type": "hornet", "count": 27, "interval": 0.889 },
+        { "type": "beetle", "count": 17, "interval": 1.412 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.415,
+      "spawns": [
+        { "type": "wasp", "count": 88, "interval": 0.273 },
+        { "type": "hornet", "count": 29, "interval": 0.828 },
+        { "type": "beetle", "count": 18, "interval": 1.333 }
+      ]
+    },
+    {
       "delay": 3.0,
       "isBoss": true,
-      "hpScale": 1.9,
+      "hpScale": 2.185,
       "spawns": [
         { "type": "hornetQueen", "count": 1, "interval": 0.0 },
-        { "type": "wasp", "count": 12, "interval": 2.0 },
-        { "type": "hornet", "count": 5, "interval": 4.8 }
+        { "type": "wasp", "count": 14, "interval": 1.714 },
+        { "type": "hornet", "count": 6, "interval": 4.0 }
       ]
     }
   ]

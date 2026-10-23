@@ -4,7 +4,7 @@
 //
 // For level L with difficulty D:
 //   waves = 5 + (L − 1)/5; the last wave is the boss wave.
-//   non-boss wave i (1-based): budget B = D · (16 + 5L) · (0.75 + 0.08i)
+//   non-boss wave i (1-based): budget B = D · (16 + 5L) · (0.6 + 0.1i)
 //     shares: hornet min(0.35, 0.05L) (cost 3), beetle L ≥ 4 ? min(0.30, 0.04(L − 3)) : 0 (cost 4), rest wasps (cost 1)
 //     counts = floor(share · B / cost), wasps at least 4; zero-count groups are omitted
 //     every group spreads its count over a 24 s window from wave start: interval = max(0.15, 24 / count)
@@ -51,7 +51,7 @@ func waves(for e: Entry) -> [Wave] {
     let normalHPScale = max(1, D * (0.6 + 0.06 * Double(L - 1)))
     var result: [Wave] = []
     for i in 1..<total {
-        let budget = D * (16 + 5 * Ld) * (0.75 + 0.08 * Double(i))
+        let budget = D * (16 + 5 * Ld) * (0.6 + 0.1 * Double(i))
         let wasps = max(4, Int(floor(waspShare * budget / 1)))
         let hornets = Int(floor(hornetShare * budget / 3))
         let beetles = Int(floor(beetleShare * budget / 4))
