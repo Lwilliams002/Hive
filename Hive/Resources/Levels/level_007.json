@@ -1,0 +1,56 @@
+{
+  "id": 7,
+  "name": "Iron Rain",
+  "waves": [
+    {
+      "delay": 1.5,
+      "spawns": [
+        { "type": "wasp", "count": 20, "interval": 1.2 },
+        { "type": "hornet", "count": 4, "interval": 6.0 },
+        { "type": "beetle", "count": 1, "interval": 24.0 }
+      ]
+    },
+    {
+      "delay": 2.5,
+      "spawns": [
+        { "type": "wasp", "count": 22, "interval": 1.091 },
+        { "type": "hornet", "count": 5, "interval": 4.8 },
+        { "type": "beetle", "count": 1, "interval": 24.0 }
+      ]
+    },
+    {
+      "delay": 2.5,
+      "spawns": [
+        { "type": "wasp", "count": 24, "interval": 1.0 },
+        { "type": "hornet", "count": 5, "interval": 4.8 },
+        { "type": "beetle", "count": 2, "interval": 12.0 }
+      ]
+    },
+    {
+      "delay": 2.5,
+      "spawns": [
+        { "type": "wasp", "count": 26, "interval": 0.923 },
+        { "type": "hornet", "count": 6, "interval": 4.0 },
+        { "type": "beetle", "count": 2, "interval": 12.0 }
+      ]
+    },
+    {
+      "delay": 2.5,
+      "spawns": [
+        { "type": "wasp", "count": 28, "interval": 0.857 },
+        { "type": "hornet", "count": 6, "interval": 4.0 },
+        { "type": "beetle", "count": 2, "interval": 12.0 }
+      ]
+    },
+    {
+      "delay": 3.0,
+      "isBoss": true,
+      "hpScale": 0.76,
+      "spawns": [
+        { "type": "bear", "count": 1, "interval": 0.0 },
+        { "type": "wasp", "count": 6, "interval": 4.0 },
+        { "type": "hornet", "count": 1, "interval": 24.0 }
+      ]
+    }
+  ]
+}

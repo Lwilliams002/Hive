@@ -1,0 +1,88 @@
+{
+  "id": 24,
+  "name": "Wailing Reeds",
+  "waves": [
+    {
+      "delay": 1.5,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 39, "interval": 0.615 },
+        { "type": "hornet", "count": 13, "interval": 1.846 },
+        { "type": "beetle", "count": 8, "interval": 3.0 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 43, "interval": 0.558 },
+        { "type": "hornet", "count": 14, "interval": 1.714 },
+        { "type": "beetle", "count": 9, "interval": 2.667 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 47, "interval": 0.511 },
+        { "type": "hornet", "count": 15, "interval": 1.6 },
+        { "type": "beetle", "count": 10, "interval": 2.4 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 50, "interval": 0.48 },
+        { "type": "hornet", "count": 16, "interval": 1.5 },
+        { "type": "beetle", "count": 10, "interval": 2.4 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 54, "interval": 0.444 },
+        { "type": "hornet", "count": 18, "interval": 1.333 },
+        { "type": "beetle", "count": 11, "interval": 2.182 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 58, "interval": 0.414 },
+        { "type": "hornet", "count": 19, "interval": 1.263 },
+        { "type": "beetle", "count": 12, "interval": 2.0 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 62, "interval": 0.387 },
+        { "type": "hornet", "count": 20, "interval": 1.2 },
+        { "type": "beetle", "count": 13, "interval": 1.846 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.98,
+      "spawns": [
+        { "type": "wasp", "count": 66, "interval": 0.364 },
+        { "type": "hornet", "count": 22, "interval": 1.091 },
+        { "type": "beetle", "count": 14, "interval": 1.714 }
+      ]
+    },
+    {
+      "delay": 3.0,
+      "isBoss": true,
+      "hpScale": 1.78,
+      "spawns": [
+        { "type": "swarmMother", "count": 1, "interval": 0.0 },
+        { "type": "wasp", "count": 12, "interval": 2.0 },
+        { "type": "hornet", "count": 4, "interval": 6.0 }
+      ]
+    }
+  ]
+}

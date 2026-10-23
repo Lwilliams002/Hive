@@ -1,0 +1,88 @@
+{
+  "id": 21,
+  "name": "Smoke Over Heather",
+  "waves": [
+    {
+      "delay": 1.5,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 35, "interval": 0.686 },
+        { "type": "hornet", "count": 11, "interval": 2.182 },
+        { "type": "beetle", "count": 7, "interval": 3.429 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 38, "interval": 0.632 },
+        { "type": "hornet", "count": 12, "interval": 2.0 },
+        { "type": "beetle", "count": 8, "interval": 3.0 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 41, "interval": 0.585 },
+        { "type": "hornet", "count": 13, "interval": 1.846 },
+        { "type": "beetle", "count": 8, "interval": 3.0 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 45, "interval": 0.533 },
+        { "type": "hornet", "count": 15, "interval": 1.6 },
+        { "type": "beetle", "count": 9, "interval": 2.667 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 48, "interval": 0.5 },
+        { "type": "hornet", "count": 16, "interval": 1.5 },
+        { "type": "beetle", "count": 10, "interval": 2.4 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 52, "interval": 0.462 },
+        { "type": "hornet", "count": 17, "interval": 1.412 },
+        { "type": "beetle", "count": 11, "interval": 2.182 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 55, "interval": 0.436 },
+        { "type": "hornet", "count": 18, "interval": 1.333 },
+        { "type": "beetle", "count": 11, "interval": 2.182 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.8,
+      "spawns": [
+        { "type": "wasp", "count": 58, "interval": 0.414 },
+        { "type": "hornet", "count": 19, "interval": 1.263 },
+        { "type": "beetle", "count": 12, "interval": 2.0 }
+      ]
+    },
+    {
+      "delay": 3.0,
+      "isBoss": true,
+      "hpScale": 1.6,
+      "spawns": [
+        { "type": "swarmMother", "count": 1, "interval": 0.0 },
+        { "type": "wasp", "count": 11, "interval": 2.182 },
+        { "type": "hornet", "count": 4, "interval": 6.0 }
+      ]
+    }
+  ]
+}

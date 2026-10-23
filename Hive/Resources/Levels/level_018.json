@@ -1,0 +1,79 @@
+{
+  "id": 18,
+  "name": "Starless Hedge",
+  "waves": [
+    {
+      "delay": 1.5,
+      "hpScale": 1.742,
+      "spawns": [
+        { "type": "wasp", "count": 33, "interval": 0.727 },
+        { "type": "hornet", "count": 11, "interval": 2.182 },
+        { "type": "beetle", "count": 7, "interval": 3.429 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.742,
+      "spawns": [
+        { "type": "wasp", "count": 36, "interval": 0.667 },
+        { "type": "hornet", "count": 12, "interval": 2.0 },
+        { "type": "beetle", "count": 7, "interval": 3.429 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.742,
+      "spawns": [
+        { "type": "wasp", "count": 39, "interval": 0.615 },
+        { "type": "hornet", "count": 13, "interval": 1.846 },
+        { "type": "beetle", "count": 8, "interval": 3.0 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.742,
+      "spawns": [
+        { "type": "wasp", "count": 42, "interval": 0.571 },
+        { "type": "hornet", "count": 14, "interval": 1.714 },
+        { "type": "beetle", "count": 9, "interval": 2.667 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.742,
+      "spawns": [
+        { "type": "wasp", "count": 45, "interval": 0.533 },
+        { "type": "hornet", "count": 15, "interval": 1.6 },
+        { "type": "beetle", "count": 9, "interval": 2.667 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.742,
+      "spawns": [
+        { "type": "wasp", "count": 49, "interval": 0.49 },
+        { "type": "hornet", "count": 16, "interval": 1.5 },
+        { "type": "beetle", "count": 10, "interval": 2.4 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 1.742,
+      "spawns": [
+        { "type": "wasp", "count": 52, "interval": 0.462 },
+        { "type": "hornet", "count": 17, "interval": 1.412 },
+        { "type": "beetle", "count": 11, "interval": 2.182 }
+      ]
+    },
+    {
+      "delay": 3.0,
+      "isBoss": true,
+      "hpScale": 1.527,
+      "spawns": [
+        { "type": "swarmMother", "count": 1, "interval": 0.0 },
+        { "type": "wasp", "count": 11, "interval": 2.182 },
+        { "type": "hornet", "count": 3, "interval": 8.0 }
+      ]
+    }
+  ]
+}

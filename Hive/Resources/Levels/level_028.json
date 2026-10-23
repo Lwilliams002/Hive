@@ -1,0 +1,97 @@
+{
+  "id": 28,
+  "name": "Ember Hollow",
+  "waves": [
+    {
+      "delay": 1.5,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 45, "interval": 0.533 },
+        { "type": "hornet", "count": 15, "interval": 1.6 },
+        { "type": "beetle", "count": 9, "interval": 2.667 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 49, "interval": 0.49 },
+        { "type": "hornet", "count": 16, "interval": 1.5 },
+        { "type": "beetle", "count": 10, "interval": 2.4 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 54, "interval": 0.444 },
+        { "type": "hornet", "count": 18, "interval": 1.333 },
+        { "type": "beetle", "count": 11, "interval": 2.182 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 58, "interval": 0.414 },
+        { "type": "hornet", "count": 19, "interval": 1.263 },
+        { "type": "beetle", "count": 12, "interval": 2.0 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 62, "interval": 0.387 },
+        { "type": "hornet", "count": 20, "interval": 1.2 },
+        { "type": "beetle", "count": 13, "interval": 1.846 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 67, "interval": 0.358 },
+        { "type": "hornet", "count": 22, "interval": 1.091 },
+        { "type": "beetle", "count": 14, "interval": 1.714 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 71, "interval": 0.338 },
+        { "type": "hornet", "count": 23, "interval": 1.043 },
+        { "type": "beetle", "count": 15, "interval": 1.6 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 75, "interval": 0.32 },
+        { "type": "hornet", "count": 25, "interval": 0.96 },
+        { "type": "beetle", "count": 16, "interval": 1.5 }
+      ]
+    },
+    {
+      "delay": 2.0,
+      "hpScale": 2.22,
+      "spawns": [
+        { "type": "wasp", "count": 80, "interval": 0.3 },
+        { "type": "hornet", "count": 26, "interval": 0.923 },
+        { "type": "beetle", "count": 17, "interval": 1.412 }
+      ]
+    },
+    {
+      "delay": 3.0,
+      "isBoss": true,
+      "hpScale": 2.02,
+      "spawns": [
+        { "type": "bear", "count": 1, "interval": 0.0 },
+        { "type": "wasp", "count": 13, "interval": 1.846 },
+        { "type": "hornet", "count": 5, "interval": 4.8 }
+      ]
+    }
+  ]
+}
