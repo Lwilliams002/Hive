@@ -12,6 +12,7 @@ final class UpgradesScene: SKScene {
     private var buyButtons: [(track: UpgradeTrack, button: Button)] = []
     private var shownTier = 1
     private var didLeave = false
+    private var homeX: CGFloat { size.width / 2 - 24 }
 
     private static let formatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -41,7 +42,7 @@ final class UpgradesScene: SKScene {
         balance.fontColor = Palette.gold
         balance.horizontalAlignmentMode = .right
         balance.verticalAlignmentMode = .center
-        balance.position = CGPoint(x: w / 2 - 24, y: h / 2 - 60)
+        balance.position = CGPoint(x: homeX, y: h / 2 - 60)
         addChild(balance)
 
         tierLabel.fontSize = 12
@@ -81,14 +82,16 @@ final class UpgradesScene: SKScene {
         rows.removeFromParent()
         rows = SKNode()
         buyButtons = []
+        let h = size.height
+        let topEdge = max(h / 2 - 440, -h / 2 + 56 + 5 * 64 + 4 * 10)
         for (i, track) in UpgradeTrack.allCases.enumerated() {
             let row = makeRow(track: track, state: state)
-            row.position = CGPoint(x: 0, y: -20 - 32 - CGFloat(i) * 74)
+            row.position = CGPoint(x: 0, y: topEdge - 32 - CGFloat(i) * 74)
             rows.addChild(row)
             let pos = CGPoint(x: 126, y: row.position.y)
             let size = CGSize(width: 96, height: 36)
             if let cost = state.upgrades.nextCost(for: track) {
-                let b = Button(title: "\u{25C6} \(cost)", name: "buy:\(track.rawValue)", size: size, style: .filled)
+                let b = Button(title: "\u{25C6} " + (Self.formatter.string(from: NSNumber(value: cost)) ?? "\(cost)"), name: "buy:\(track.rawValue)", size: size, style: .filled)
                 b.isEnabled = state.canAfford(track)
                 b.position = pos
                 rows.addChild(b)
@@ -154,8 +157,10 @@ final class UpgradesScene: SKScene {
             flow.showHome()
             return
         }
-        guard let hit = buyButtons.first(where: { $0.button.contains(p) }) else { return }
-        if flow.purchase(hit.track) {
+        guard let hit = buyButtons.first(where: {
+            abs(p.x - $0.button.position.x) <= 48 && abs(p.y - $0.button.position.y) <= 18
+        }) else { return }
+        if flow.state.canAfford(hit.track), flow.purchase(hit.track) {
             let newTier = flow.state.upgrades.visualTier
             refresh()
             if newTier != shownTier {
@@ -172,11 +177,11 @@ final class UpgradesScene: SKScene {
     }
 
     private func shakeBalance() {
-        balance.removeAction(forKey: "shake")
-        let base = balance.position.x
+        balance.removeAllActions()
+        balance.position.x = homeX
         let step = SKAction.sequence([
-            .moveTo(x: base + 6, duration: 0.0333), .moveTo(x: base - 6, duration: 0.0333),
+            .moveTo(x: homeX + 6, duration: 0.0333), .moveTo(x: homeX - 6, duration: 0.0333),
         ])
-        balance.run(.sequence([.repeat(step, count: 3), .moveTo(x: base, duration: 0.0333)]), withKey: "shake")
+        balance.run(.sequence([.repeat(step, count: 3), .moveTo(x: homeX, duration: 0.0333)]))
     }
 }
