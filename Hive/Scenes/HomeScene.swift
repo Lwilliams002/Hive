@@ -35,13 +35,21 @@ final class HomeScene: SKScene {
         balance.position = CGPoint(x: 0, y: top - 108)
         addChild(balance)
 
+        #if DEBUG
+        // Debug-only hive preview: launch with HIVE_PREVIEW_TIER=n to show that tier instead of PLAY.
+        if let raw = ProcessInfo.processInfo.environment["HIVE_PREVIEW_TIER"], let tier = Int(raw) {
+            addChild(HiveRenderer.makeHive(visualTier: tier))
+            return
+        }
+        #endif
+
         play.isEnabled = !flow.levels.availableLevelIDs().isEmpty
         play.position = .zero
         addChild(play)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, play.contains(touch.location(in: self)) else { return }
+        guard let touch = touches.first, play.parent != nil, play.contains(touch.location(in: self)) else { return }
         let ids = flow.levels.availableLevelIDs()
         guard let maxID = ids.max() else { return }
         flow.startLevel(id: min(flow.state.currentLevel, maxID))

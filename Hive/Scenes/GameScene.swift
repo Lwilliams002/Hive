@@ -49,7 +49,7 @@ final class GameScene: SKScene {
         backgroundColor = Palette.background
 
         if hud == nil {
-            addChild(HiveNode(tier: 1))
+            addChild(HiveRenderer.makeHive(visualTier: flow.state.upgrades.visualTier))
             hud = HUDNode(viewSize: size)
             addChild(hud)
             startRun()
