@@ -32,6 +32,10 @@ public struct WaveDirector: Equatable {
 
     public var isBossWave: Bool { level.waves[waveNumber - 1].isBoss }
 
+    /// `hpScale` of the most recently started wave (1.0 before the first wave). Every batch returned by
+    /// `tick` belongs to a single wave, so `World` reads this right after `tick` to scale that batch's hp.
+    public var currentHpScale: Double { startedCount > 0 ? level.waves[startedCount - 1].hpScale : 1.0 }
+
     public var allSpawnsIssued: Bool { startedCount == totalWaves && currentDone }
 
     public mutating func tick(dt: Double, aliveMobs: Int) -> [MobType] {

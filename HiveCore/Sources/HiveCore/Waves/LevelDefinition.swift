@@ -22,20 +22,24 @@ public struct WaveDefinition: Codable, Equatable {
     public let delay: Double
     public let isBoss: Bool
     public let spawns: [SpawnGroup]
+    /// Multiplier on the max hp of every mob spawned in this wave (and their escorts).
+    public let hpScale: Double
 
-    public init(delay: Double, isBoss: Bool = false, spawns: [SpawnGroup]) {
+    public init(delay: Double, isBoss: Bool = false, spawns: [SpawnGroup], hpScale: Double = 1.0) {
         self.delay = delay
         self.isBoss = isBoss
         self.spawns = spawns
+        self.hpScale = hpScale
     }
 
-    private enum CodingKeys: String, CodingKey { case delay, isBoss, spawns }
+    private enum CodingKeys: String, CodingKey { case delay, isBoss, spawns, hpScale }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         delay = try c.decode(Double.self, forKey: .delay)
         isBoss = try c.decodeIfPresent(Bool.self, forKey: .isBoss) ?? false
         spawns = try c.decode([SpawnGroup].self, forKey: .spawns)
+        hpScale = try c.decodeIfPresent(Double.self, forKey: .hpScale) ?? 1.0
     }
 }
 
@@ -57,6 +61,12 @@ public struct LevelDefinition: Codable, Equatable {
         }
         for (i, wave) in level.waves.enumerated() where wave.spawns.isEmpty {
             throw LevelError.invalid("level \(level.id) wave \(i) has no spawns")
+        }
+        for (i, wave) in level.waves.enumerated() {
+            let badGroup = wave.spawns.contains { $0.count <= 0 || $0.interval < 0 }
+            if badGroup || wave.delay < 0 || wave.hpScale <= 0 {
+                throw LevelError.invalid("level \(level.id) wave \(i) has invalid numbers")
+            }
         }
         return level
     }

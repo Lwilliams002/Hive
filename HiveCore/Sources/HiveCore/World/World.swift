@@ -23,11 +23,16 @@ public struct World {
     private var wavesStarted = 0
     /// Spawns still owed by the current wave before the next director spawn means a new wave.
     private var spawnsLeftInWave = 0
+    /// Extra card picks owed when one tick's kills crossed more than one nectar threshold.
+    private var pendingPicks = 0
 
     private static let hitFlashDuration = 0.08
     /// Seconds between hits from a boss parked at the hive edge.
     private static let bossAttackInterval = 1.0
     private static let spreadRadians = 10.0 * .pi / 180
+    /// Gap between a boss's edge and its escorts' spawn point, toward the hive.
+    private static let escortGap = 8.0
+    private static let escortJitterRadians = 15.0 * .pi / 180
 
     public init(level: LevelDefinition, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
@@ -68,12 +73,24 @@ public struct World {
                 events.append(.waveStarted(number: wavesStarted, isBoss: wave.isBoss))
             }
             spawnsLeftInWave -= spawns.count
+            let hpScale = director.currentHpScale
             for type in spawns {
                 let angle = rng.unitDouble() * 2 * .pi
                 let mob = Mob(id: makeID(), type: type,
-                              position: Vec2(cos(angle), sin(angle)) * World.spawnRadius)
+                              position: Vec2(cos(angle), sin(angle)) * World.spawnRadius, hpScale: hpScale)
                 mobs.append(mob)
                 events.append(.mobSpawned(id: mob.id, type: type))
+            }
+        }
+
+        // (3b) boss escorts. Only mobs present now (including this tick's spawns) count down; escorts are
+        // appended after `preexistingMobCount`, so like other new spawns they skip movement this tick.
+        for i in 0..<mobs.count {
+            guard let escort = mobs[i].type.stats.escort else { continue }
+            mobs[i].escortTimer -= dt
+            while mobs[i].escortTimer <= 0 {
+                spawnEscort(escort, parentIndex: i, events: &events)
+                mobs[i].escortTimer += escort.every
             }
         }
 
@@ -102,21 +119,21 @@ public struct World {
         // (6) projectile–mob collisions
         var deadIDs = Set<Int>()
         var spentProjectiles = Set<Int>()
-        var thresholdCrossed = false
+        var thresholdsCrossed = 0
         for p in projectiles.indices {
             for m in mobs.indices {
                 let mob = mobs[m]
                 if deadIDs.contains(mob.id) || projectiles[p].hitMobIDs.contains(mob.id) { continue }
                 let reach = mob.type.stats.radius + Projectile.radius
                 guard projectiles[p].position.distance(to: mob.position) < reach else { continue }
-                mobs[m].hp -= projectiles[p].damage
+                damage(projectiles[p].damage, to: &mobs[m])
                 mobs[m].hitFlash = World.hitFlashDuration
                 projectiles[p].hitMobIDs.append(mob.id)
                 events.append(.mobHit(id: mob.id))
                 if mobs[m].hp <= 0 {
                     deadIDs.insert(mob.id)
                     events.append(.mobKilled(id: mob.id, type: mob.type, at: mobs[m].position))
-                    if nectar.add(mob.type.stats.nectar) { thresholdCrossed = true }
+                    if nectar.add(mob.type.stats.nectar) { thresholdsCrossed += 1 }
                 }
                 projectiles[p].pierceRemaining -= 1
                 if projectiles[p].pierceRemaining < 0 {
@@ -130,9 +147,12 @@ public struct World {
         // (7) remove dead mobs
         mobs.removeAll { deadIDs.contains($0.id) }
 
-        // Nectar threshold: pause into card pick, skipping the rest of the tick.
-        if thresholdCrossed {
-            phase = .pickingCards(UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng))
+        // Nectar threshold: pause into card pick, skipping the rest of the tick — unless this kill also
+        // empties the level, in which case the pick is skipped (nectar carries over) and step 12 clears.
+        let wouldClear = director.allSpawnsIssued && mobs.isEmpty
+        if thresholdsCrossed > 0 && !wouldClear {
+            pendingPicks = thresholdsCrossed - 1
+            phase = .pickingCards(drawCards())
             events.append(.nectarThreshold)
             return events
         }
@@ -191,11 +211,18 @@ public struct World {
         return events
     }
 
-    /// Applies the chosen card and resumes play. No-op outside `.pickingCards`.
+    /// Applies the chosen card, then offers the next pick if another threshold is already earned
+    /// (several crossed in one tick, or excess nectar covering the next threshold); otherwise resumes play.
+    /// No-op outside `.pickingCards`.
     public mutating func choose(_ card: UpgradeCard) {
         guard case .pickingCards = phase else { return }
         apply(card: card)
-        phase = .playing
+        if pendingPicks > 0 {
+            pendingPicks -= 1
+            phase = .pickingCards(drawCards())
+        } else {
+            phase = nectar.add(0) ? .pickingCards(drawCards()) : .playing
+        }
     }
 
     private mutating func apply(card: UpgradeCard) {
@@ -205,6 +232,33 @@ public struct World {
     }
 
     // MARK: - Helpers
+
+    private mutating func drawCards() -> [UpgradeCard] {
+        UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng)
+    }
+
+    /// Every damage path goes through here: flat armor reduction, minimum 1 per hit.
+    private func damage(_ raw: Double, to mob: inout Mob) {
+        mob.hp -= max(1, raw - mob.type.stats.armor)
+    }
+
+    /// Spawns `escort.count` mobs `radius + escortGap` from the parent toward the hive, each rotated by a
+    /// ±15° jitter about the parent, inheriting the parent's `hpScale`.
+    private mutating func spawnEscort(_ escort: EscortSpawn, parentIndex i: Int, events: inout [GameEvent]) {
+        let parent = mobs[i]
+        let offset = (Vec2.zero - parent.position.normalized) * (parent.type.stats.radius + World.escortGap)
+        var ids: [Int] = []
+        for _ in 0..<escort.count {
+            let jitter = (rng.unitDouble() * 2 - 1) * World.escortJitterRadians
+            let c = cos(jitter), s = sin(jitter)
+            let rotated = Vec2(offset.x * c - offset.y * s, offset.x * s + offset.y * c)
+            let mob = Mob(id: makeID(), type: escort.type, position: parent.position + rotated, hpScale: parent.hpScale)
+            mobs.append(mob)
+            ids.append(mob.id)
+            events.append(.mobSpawned(id: mob.id, type: mob.type))
+        }
+        events.append(.escortSpawned(parentID: parent.id, ids: ids))
+    }
 
     private mutating func makeID() -> Int {
         defer { nextID += 1 }

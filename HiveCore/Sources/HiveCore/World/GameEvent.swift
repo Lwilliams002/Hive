@@ -2,6 +2,8 @@ import Foundation
 
 public enum GameEvent: Equatable {
     case mobSpawned(id: Int, type: MobType)
+    /// A boss spawned escorts `ids` (each also reported via `mobSpawned`).
+    case escortSpawned(parentID: Int, ids: [Int])
     case projectileFired(id: Int)
     case mobHit(id: Int)
     case mobKilled(id: Int, type: MobType, at: Vec2)
