@@ -29,7 +29,38 @@ Levels are JSON in `Hive/Resources/Levels/` (`level_001.json`). The app crashes 
   - `isBoss` (optional, default false): marks a boss wave,
   - `spawns`: list of `{ "type": "wasp" | "hornet" | "bear", "count": n, "interval": seconds between spawns }`.
 
-`HiveCore/Tests/HiveCoreTests/BalanceProbeTests.swift` runs level 1 (the on-ramp) headlessly over seeds 1...20 with two card-pick policies and prints a `BalanceProbe:` / `BalanceProbe(greedy):` summary for each. The first-card probe (always take the first card offered) must clear 4–12 of 20 runs and reach the boss at least once; the greedy probe (prefer damage cards, heal when below 40% HP) must clear 10–18 of 20 and reach the boss in at least 10 of 20. Re-run it after tuning numbers.
+`HiveCore/Tests/HiveCoreTests/BalanceProbeTests.swift` runs level 1 (the on-ramp) headlessly over seeds 1...20 and prints a summary per probe. Re-run it after tuning numbers or upgrade constants.
+
+- `BalanceProbe:` first-card policy (always take the first card offered), base stats: must clear 4-12 of 20 and reach the boss at least once.
+- `BalanceProbe(greedy):` greedy policy (prefer damage cards, heal below 40% HP), base stats: must clear 10-18 of 20 and reach the boss in at least 10 of 20.
+- `BalanceProbe(midgame):` greedy policy with Comb, Stinger, Swarm and Queen at tier 3 (stats and starting cards from `PermanentUpgrades`): must clear at least 17 of 20, so permanent progress makes level 1 close to a sure thing.
+
+## Flow
+
+- Home: coin balance, the hive drawn at its current visual tier, and PLAY / LEVELS / UPGRADES (ENDLESS is locked until level 10). PLAY starts the current level (the first not yet cleared, or the last available level once all are cleared).
+- LEVELS: one row per level, tagged CLEARED, CURRENT or LOCKED. Tap a CLEARED or CURRENT row to play it; the list scrolls by dragging.
+- UPGRADES: spend coins on the five permanent tracks with a live hive preview.
+- Results (after a run): CONTINUE (only after a clear, and only if the next level exists), RETRY, HOME. Coins are awarded when the run ends.
+
+## Save file
+
+Progress (coins, upgrade tiers, highest cleared level) is stored as `save.json` in the app's Application Support directory under `Hive/` (`Library/Application Support/Hive/save.json` in the app container). It is written after every purchase and every counted run. If the file cannot be decoded (or is from a newer version), it is moved aside to a backup next to it and the game starts from a fresh save.
+
+## Permanent upgrades
+
+Each track has tiers 1-10. Cost of tier t is `20 + 30 * t^2` coins.
+
+| Track | Effect at tier t |
+| --- | --- |
+| Comb | max HP = 100 + 15t |
+| Stinger | damage = 10 + 1.5t |
+| Swarm | fire rate = 2 + 0.15t shots/s; projectiles = 1, +1 at tier 4, +1 at tier 8 |
+| Nectar | coin multiplier = 1 + 0.10t |
+| Queen | starting upgrade cards = floor(t / 3) |
+
+Tier costs: 1: 50, 2: 140, 3: 290, 4: 500, 5: 770, 6: 1,100, 7: 1,490, 8: 1,940, 9: 2,450, 10: 3,020.
+
+Visual tier of the hive = `1 + (total tiers across all tracks) / 5` (integer division), from 1 up to 11.
 
 ## Docs
 

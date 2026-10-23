@@ -20,12 +20,13 @@ final class BalanceProbeTests: XCTestCase {
 
     private struct ProbeResult { var cleared = 0, bossReached = 0; var avgEndWave = 0.0 }
 
-    private func runProbe(pick: (World, [UpgradeCard]) -> UpgradeCard) throws -> ProbeResult {
+    private func runProbe(hiveStats: HiveStats = .base, startingCardCount: Int = 0,
+                          pick: (World, [UpgradeCard]) -> UpgradeCard) throws -> ProbeResult {
         let level = try LevelDefinition.load(from: try levelData())
         var r = ProbeResult()
         var endWaveSum = 0
         for seed in Self.seeds {
-            var world = World(level: level, seed: UInt64(seed))
+            var world = World(level: level, hiveStats: hiveStats, startingCardCount: startingCardCount, seed: UInt64(seed))
             var sawBoss = false
             var t = 0.0
             while t < 300 {
@@ -63,5 +64,21 @@ final class BalanceProbeTests: XCTestCase {
         print("BalanceProbe(greedy): cleared \(r.cleared) / \(Self.seeds.count), boss reached \(r.bossReached) / \(Self.seeds.count), avg end wave \(String(format: "%.2f", r.avgEndWave))")
         XCTAssertTrue((10...18).contains(r.cleared), "greedy cleared \(r.cleared) not in 10...18")
         XCTAssertGreaterThanOrEqual(r.bossReached, 10)
+    }
+
+    private static let greedyPriority = ["twin_stinger", "venom", "rapid_stingers", "piercing", "propolis_armor", "royal_jelly"]
+    private static func greedy(_ world: World, _ cards: [UpgradeCard]) -> UpgradeCard {
+        if world.hive.hp < 0.4 * world.hive.stats.maxHP,
+           let heal = cards.first(where: { $0.id == "royal_jelly" }) ?? cards.first(where: { $0.id == "propolis_armor" }) {
+            return heal
+        }
+        return cards.min { (greedyPriority.firstIndex(of: $0.id) ?? 99) < (greedyPriority.firstIndex(of: $1.id) ?? 99) }!
+    }
+
+    func testGreedyPolicyAtMidGameUpgradesClearsLevelOneReliably() throws {
+        let up = PermanentUpgrades(tiers: [.comb: 3, .stinger: 3, .swarm: 3, .queen: 3])
+        let r = try runProbe(hiveStats: up.hiveStats(), startingCardCount: up.startingCardCount, pick: Self.greedy)
+        print("BalanceProbe(midgame): cleared \(r.cleared) / \(Self.seeds.count), boss reached \(r.bossReached) / \(Self.seeds.count), avg end wave \(String(format: "%.2f", r.avgEndWave))")
+        XCTAssertGreaterThanOrEqual(r.cleared, 17, "mid-game cleared \(r.cleared) < 17")
     }
 }
