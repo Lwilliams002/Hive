@@ -35,10 +35,107 @@ Levels are JSON in `Hive/Resources/Levels/` (`level_001.json`). The app crashes 
 - `BalanceProbe(greedy):` greedy policy (prefer damage cards, heal below 40% HP), base stats: must clear 10-18 of 20 and reach the boss in at least 10 of 20.
 - `BalanceProbe(midgame):` greedy policy with Comb, Stinger, Swarm and Queen at tier 3 (stats and starting cards from `PermanentUpgrades`): must clear at least 17 of 20, so permanent progress makes level 1 close to a sure thing.
 
+## Mobs
+
+| Type | HP | Speed | Contact dmg | Radius | Nectar | Boss | Armor | Escorts |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| wasp | 20 | 90 | 10 | 10 | 1 | no | 0 | - |
+| hornet | 60 | 55 | 20 | 14 | 3 | no | 0 | - |
+| beetle | 90 | 40 | 25 | 13 | 4 | no | 5 | - |
+| bear | 450 | 28 | 40 | 30 | 15 | yes | 0 | - |
+| hornetQueen | 700 | 32 | 35 | 26 | 20 | yes | 0 | 2 hornets every 6 s, first at 3 s |
+| swarmMother | 380 | 45 | 25 | 22 | 18 | yes | 0 | 4 wasps every 4 s, first at 2 s |
+
+Armor is a flat per-hit reduction (minimum 1 damage). Escorts spawn at the parent's position offset by `radius + 8` toward the hive, count as normal mobs, stop when the parent dies, and do not spawn during a card pick. Level JSON mob types: `wasp`, `hornet`, `beetle`, `bear`, `hornetQueen`, `swarmMother`; waves may also carry `hpScale`.
+
+## Cards
+
+A card is offered only once `unlockLevel <= highestClearedLevel` (story level L offers cards unlocked through L - 1; level 1 uses the original six). Draw weights: common 70, rare 25, epic `min(25, 5 + 3 * nectar level)`. Starting cards never include heal-only or epic cards.
+
+| Card | Rarity | Effect | Unlock |
+| --- | --- | --- | --- |
+| Rapid Stingers | common | +25% fire rate | 0 |
+| Venom | common | +30% damage | 0 |
+| Propolis Armor | common | +30 max HP, heal 30 | 0 |
+| Royal Jelly | common | heal 50% of max HP | 0 |
+| Twin Stinger | rare | +1 projectile | 0 |
+| Piercing Stinger | rare | pierce +1 mob | 0 |
+| Honey Field | rare | mobs within 160 of the hive move 35% slower | 0 |
+| Guard Bees | rare | +2 bees orbit the hive, 6 damage on touch | 0 |
+| Pollen Cloud | rare | hits spread 40% damage to mobs within 45 | 0 |
+| Queen's Wrath | epic | +60% damage | 5 |
+| Thick Wax | epic | hive takes 30% less contact damage | 7 |
+| Swarm Call | epic | +2 projectiles | 10 |
+| Royal Guard | epic | +3 bees, bee damage doubled | 15 |
+
+## Permanent tier gating
+
+| Tiers | Require `highestClearedLevel` |
+| --- | --- |
+| 1-5 | always |
+| 6-8 | 8 |
+| 9-10 | 16 |
+
+A locked next tier shows a disabled `LVL n` button and `Unlocks after level n` on the row; `GameState.purchase` refuses it.
+
+## Endless
+
+Unlocked when `highestClearedLevel >= 10`. It never clears; a run ends on game over or quit and records its best wave. Wave n (n >= 1):
+
+| Group | Count | Interval |
+| --- | --- | --- |
+| wasps | 8 + 2n | max(0.25, 0.8 - 0.015n) s |
+| hornets (n >= 2) | n / 2 | 2.0 s |
+| beetles (n >= 4) | n / 3 | 2.5 s |
+| boss (every 5th wave) | 1, cycling bear, hornetQueen, swarmMother | - |
+
+`hpScale = 1 + 0.06n`, 2.0 s between waves. Coins: sum over k = 1...n of (10 + 3k), times the coin multiplier.
+
+## Level generator
+
+Levels 2-30 are generated; level 1 is hand-kept (`testLevelOneUnchanged` hashes it). Edit the per-level `difficulty` (and name/boss) in `Tools/level-table.json`, then from the repo root:
+
+```
+swift Tools/genlevels.swift
+```
+
+The formulas are in the header of `Tools/genlevels.swift`. Re-run the probes after changing the table.
+
+## Probes
+
+`LevelCurveProbeTests` plays each probed level headlessly (greedy policy, seeds 1...20, 1/30 s ticks, 420 s cap) with the card pool the app offers at that level, at the expected tier count `T = min(50, Int((L - 1) * 1.2))` and at a "behind" loadout (`T - max(4, min(6, T / 4))`).
+
+```
+cd HiveCore && swift test                                      # default levels 2,3,4,5,7,10,13,16,20,25,30
+HIVE_FULL_PROBE=1 swift test --filter LevelCurveProbeTests     # every level 2...30
+HIVE_PROBE_LEVELS=4,9 swift test --filter LevelCurveProbeTests # chosen levels
+swift test --skip LevelCurveProbeTests                         # everything else, fast
+```
+
+| Bound | Default |
+| --- | --- |
+| cleared at expected T | >= 10/20 |
+| L2-3 at expected | <= 18/20 |
+| L >= 4 behind | <= 7/20 |
+| L >= 4 at expected | <= 19/20 |
+| L >= 4 behind average end wave | >= 2.0 (never overridden) |
+
+Overrides (`LevelCurveOverrides`; levels sitting on a difficulty cliff):
+
+| Level | At expected max | Behind max |
+| --- | --- | --- |
+| 4 | 19 | 9 |
+| 11 | 20 | 7 |
+| 13 | 20 | 7 |
+| 14 | 20 | 7 |
+| 16 | 19 | 8 |
+| 19 | 20 | 8 |
+| 23 | 19 | 8 |
+
 ## Flow
 
 - Home: coin balance, the hive drawn at its current visual tier, and PLAY / LEVELS / UPGRADES (ENDLESS is locked until level 10). PLAY starts the current level (the first not yet cleared, or the last available level once all are cleared).
-- LEVELS: one row per level, tagged CLEARED, CURRENT or LOCKED. Tap a CLEARED or CURRENT row to play it; the list scrolls by dragging.
+- LEVELS: 30 rows, tagged CLEARED, CURRENT or LOCKED, clipped under the title. Opens scrolled to the CURRENT row; tap a CLEARED or CURRENT row to play it; the list scrolls by dragging.
 - UPGRADES: spend coins on the five permanent tracks with a live hive preview.
 - Results (after a run): CONTINUE (only after a clear, and only if the next level exists), RETRY, HOME. Coins are awarded when the run ends.
 

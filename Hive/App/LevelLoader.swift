@@ -5,6 +5,7 @@ import HiveCore
 final class LevelLoader {
     private let bundle: Bundle
     private var cachedIDs: [Int]?
+    private var cachedNames: [Int: String] = [:]
 
     init(bundle: Bundle = .main) {
         self.bundle = bundle
@@ -26,6 +27,14 @@ final class LevelLoader {
     func load(id: Int) throws -> LevelDefinition {
         guard let url = url(for: id) else { throw CocoaError(.fileNoSuchFile) }
         return try LevelDefinition.load(from: Data(contentsOf: url))
+    }
+
+    /// The level's display name; each level file is decoded at most once.
+    func name(for id: Int) -> String? {
+        if let name = cachedNames[id] { return name }
+        guard let name = (try? load(id: id))?.name else { return nil }
+        cachedNames[id] = name
+        return name
     }
 
     private func url(for id: Int) -> URL? {

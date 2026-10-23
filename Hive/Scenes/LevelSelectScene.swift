@@ -13,6 +13,8 @@ final class LevelSelectScene: SKScene {
     private var lastY: CGFloat = 0
     private var totalMove: CGFloat = 0
     private var maxScroll: CGFloat = 0
+    private var listTop: CGFloat = 0
+    private var listBottom: CGFloat = 0
 
     private static let rowSize = CGSize(width: 300, height: 56)
     private static let gap: CGFloat = 12
@@ -50,12 +52,19 @@ final class LevelSelectScene: SKScene {
         title.position = CGPoint(x: 0, y: h / 2 - 68)
         addChild(title)
 
-        addChild(container)
+        listTop = h / 2 - 130 + 6
+        listBottom = -h / 2 + 56
+        let mask = SKSpriteNode(color: .white, size: CGSize(width: w, height: listTop - listBottom))
+        mask.position = CGPoint(x: 0, y: (listTop + listBottom) / 2)
+        let crop = SKCropNode()
+        crop.maskNode = mask
+        crop.addChild(container)
+        addChild(crop)
         let state = flow.state
         let ids = flow.levels.availableLevelIDs().sorted()
         let top = h / 2 - 130
         for (i, id) in ids.enumerated() {
-            let name = (try? flow.levels.load(id: id))?.name
+            let name = flow.levels.name(for: id)
             let row = makeRow(id: id, name: name, state: state)
             row.position = CGPoint(x: 0, y: top - Self.rowSize.height / 2 - CGFloat(i) * (Self.rowSize.height + Self.gap))
             container.addChild(row)
@@ -64,6 +73,11 @@ final class LevelSelectScene: SKScene {
         let contentHeight = CGFloat(ids.count) * Self.rowSize.height + CGFloat(max(ids.count - 1, 0)) * Self.gap
         let available = h - 130 - 56
         maxScroll = max(0, contentHeight - available)
+        // Centre the CURRENT row in the list area (clamped).
+        if let cur = rowIDs.first(where: { $0.id == min(state.currentLevel, ids.last ?? 1) }) {
+            let areaCenter = (listTop + listBottom) / 2
+            container.position.y = min(max(areaCenter - cur.node.position.y, 0), maxScroll)
+        }
     }
 
     private func makeRow(id: Int, name: String?, state: GameState) -> SKNode {
@@ -94,6 +108,9 @@ final class LevelSelectScene: SKScene {
         tag.verticalAlignmentMode = .center
         tag.position = CGPoint(x: Self.rowSize.width / 2 - 16, y: 0)
         row.addChild(tag)
+        // Long names shrink to stay clear of the tag.
+        let maxTextWidth = Self.rowSize.width - 32 - 80 - 8
+        if text.frame.width > maxTextWidth { text.fontSize = 15 * maxTextWidth / text.frame.width }
 
         if locked { row.alpha = 0.35 }
         return row
@@ -128,6 +145,7 @@ final class LevelSelectScene: SKScene {
         guard !didStart, !didLeave, let start = touchStart, let touch = touches.first else { return }
         let end = touch.location(in: self)
         guard totalMove < 8, abs(end.x - start.x) < 8 else { return }
+        guard end.y <= listTop, end.y >= listBottom else { return }
         let local = convert(end, to: container)
         for r in rowIDs where r.playable {
             if abs(local.x - r.node.position.x) <= Self.rowSize.width / 2,

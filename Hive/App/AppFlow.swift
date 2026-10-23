@@ -46,16 +46,22 @@ final class AppFlow {
 
     func showLevelSelect() { present(LevelSelectScene(flow: self, size: view.bounds.size)) }
 
+    /// Starting cards are applied at full HP, so heal-only cards would be wasted; epics are never free.
+    private static func startingPool(from pool: [UpgradeCard]) -> [UpgradeCard] {
+        pool.filter { !$0.effect.isHealOnly && $0.rarity != .epic }
+    }
+
     func startLevel(id: Int) {
         guard let level = try? levels.load(id: id) else {
             showHome()
             return
         }
-        // Starting cards are applied at full HP, so heal-only cards would be wasted.
-        let startingPool = UpgradeCatalog.milestone1.filter { !$0.effect.isHealOnly }
+        // Level 1 keeps the hand-tuned milestone 1 pool; later levels offer what the level-curve probes assume.
+        let pool = id == 1 ? UpgradeCatalog.milestone1 : UpgradeCatalog.pool(unlockedThrough: id - 1)
+        let startingPool = Self.startingPool(from: pool)
         let scene = GameScene(level: level, levelId: id,
                               stats: state.upgrades.hiveStats(),
-                              cardPool: UpgradeCatalog.milestone1,
+                              cardPool: pool,
                               startingCardPool: startingPool,
                               startingCardCount: state.upgrades.startingCardCount,
                               flow: self, size: view.bounds.size)
@@ -67,10 +73,11 @@ final class AppFlow {
             showHome()
             return
         }
-        let startingPool = UpgradeCatalog.milestone1.filter { !$0.effect.isHealOnly }
+        let pool = UpgradeCatalog.pool(unlockedThrough: state.highestClearedLevel)
+        let startingPool = Self.startingPool(from: pool)
         let scene = GameScene(mode: .endless, provider: .endless(EndlessConfig()),
                               stats: state.upgrades.hiveStats(),
-                              cardPool: UpgradeCatalog.milestone1,
+                              cardPool: pool,
                               startingCardPool: startingPool,
                               startingCardCount: state.upgrades.startingCardCount,
                               flow: self, size: view.bounds.size)

@@ -120,17 +120,26 @@ final class UpgradesScene: SKScene {
             rows.addChild(row)
             let pos = CGPoint(x: 126, y: row.position.y)
             let size = CGSize(width: 96, height: 36)
-            if let cost = state.upgrades.nextCost(for: track) {
-                let b = Button(title: "\u{25C6} " + (Self.formatter.string(from: NSNumber(value: cost)) ?? "\(cost)"), name: "buy:\(track.rawValue)", size: size, style: .filled)
-                b.isEnabled = state.canAfford(track)
-                b.position = pos
-                rows.addChild(b)
-                buyButtons.append((track, b))
-            } else {
-                let b = Button(title: "MAX", name: "buy:\(track.rawValue)", size: size, style: .outlined)
+            let block = state.purchaseBlock(for: track)
+            let name = "buy:\(track.rawValue)"
+            switch block {
+            case .maxed?:
+                let b = Button(title: "MAX", name: name, size: size, style: .outlined)
                 b.isEnabled = false
                 b.position = pos
                 rows.addChild(b)
+            case .lockedUntil(let level)?:
+                let b = Button(title: "LVL \(level)", name: name, size: size, style: .outlined)
+                b.isEnabled = false
+                b.position = pos
+                rows.addChild(b)
+            default:
+                let cost = state.upgrades.nextCost(for: track) ?? 0
+                let b = Button(title: "\u{25C6} " + (Self.formatter.string(from: NSNumber(value: cost)) ?? "\(cost)"), name: name, size: size, style: .filled)
+                b.isEnabled = block == nil
+                b.position = pos
+                rows.addChild(b)
+                buyButtons.append((track, b))
             }
         }
         addChild(rows)
@@ -158,9 +167,14 @@ final class UpgradesScene: SKScene {
         let tier = state.upgrades.tier(of: track)
         label(track.displayName, size: 16, color: Palette.white, alpha: 1, y: 18)
         label(track.summary, size: 11, color: Palette.gold, alpha: 0.7, y: 2)
-        let next = tier >= PermanentUpgrades.maxTier
-            ? "Maxed"
-            : state.upgrades.effectDescription(for: track, atTier: tier + 1)
+        let next: String
+        if tier >= PermanentUpgrades.maxTier {
+            next = "Maxed"
+        } else if case .lockedUntil(let level)? = state.purchaseBlock(for: track) {
+            next = "Unlocks after level \(level)"
+        } else {
+            next = state.upgrades.effectDescription(for: track, atTier: tier + 1)
+        }
         label(next, size: 11, color: Palette.white, alpha: 0.55, y: -14)
 
         for i in 0..<PermanentUpgrades.maxTier {
