@@ -17,7 +17,7 @@ final class GameScene: SKScene {
     private let mode: RunMode
     private let provider: WaveProvider
     /// Best endless wave when the scene started; the baseline for "NEW BEST" and the HUD.
-    private let previousBest: Int
+    private var previousBest: Int
     private let stats: HiveStats
     private let cardPool: [UpgradeCard]
     private let startingCardPool: [UpgradeCard]
@@ -125,6 +125,7 @@ final class GameScene: SKScene {
     }
 
     private func startRun() {
+        previousBest = flow.state.bestEndlessWave  // any earlier run was already recorded
         for node in mobNodes.values { node.removeFromParent() }
         for node in projectileNodes.values { node.removeFromParent() }
         for node in beeNodes { node.removeFromParent() }
