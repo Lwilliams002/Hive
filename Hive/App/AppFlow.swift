@@ -29,8 +29,7 @@ final class AppFlow {
         present(HomeScene(flow: self, size: view.bounds.size))
     }
 
-    /// Placeholder until the upgrades screen exists.
-    func showUpgrades() { present(PlaceholderScene(title: "UPGRADES", flow: self, size: view.bounds.size)) }
+    func showUpgrades() { present(UpgradesScene(flow: self, size: view.bounds.size)) }
 
     /// Placeholder until the level-select screen exists.
     func showLevelSelect() { present(PlaceholderScene(title: "LEVELS", flow: self, size: view.bounds.size)) }
