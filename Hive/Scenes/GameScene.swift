@@ -26,9 +26,14 @@ final class GameScene: SKScene {
     private var world: World!
     private var mobNodes: [Int: MobNode] = [:]
     private var projectileNodes: [Int: ProjectileNode] = [:]
+    private var beeNodes: [GuardBeeNode] = []
+    private var slowField: SlowFieldNode?
+    /// Mobs hit by a guard bee this frame; flashed even if the core's flash timer already ran out.
+    private var beeHitMobs = Set<Int>()
     private var lastUpdate: TimeInterval?
     private var hud: HUDNode!
     private var startingBanner: SKNode?
+    private var bossBanner: SKNode?
     private var overlay: Overlay?
     /// Game-level pause (distinct from `SKNode.isPaused`, which would also stop overlay rendering/actions).
     private var isGamePaused = false
@@ -113,8 +118,15 @@ final class GameScene: SKScene {
     private func startRun() {
         for node in mobNodes.values { node.removeFromParent() }
         for node in projectileNodes.values { node.removeFromParent() }
+        for node in beeNodes { node.removeFromParent() }
         mobNodes.removeAll()
         projectileNodes.removeAll()
+        beeNodes.removeAll()
+        slowField?.removeFromParent()
+        slowField = nil
+        bossBanner?.removeFromParent()
+        bossBanner = nil
+        beeHitMobs.removeAll()
         overlay?.removeFromParent()
         overlay = nil
         isGamePaused = false
@@ -154,6 +166,18 @@ final class GameScene: SKScene {
         banner.run(.sequence([.wait(forDuration: 1.2), .fadeOut(withDuration: 0.3), .removeFromParent()]))
         addChild(banner)
         startingBanner = banner
+    }
+
+    /// Names the boss of the wave that just started: shown 2 s, then a 0.3 s fade.
+    private func showBossBanner() {
+        guard let wave = world.director.currentWaveDefinition,
+              let type = wave.spawns.first(where: { $0.type.stats.isBoss })?.type,
+              let text = BossBanner.text(for: type) else { return }
+        bossBanner?.removeFromParent()
+        let banner = BossBanner(title: text.title, subtitle: text.subtitle, viewSize: size)
+        banner.run(.sequence([.wait(forDuration: 2.0), .fadeOut(withDuration: 0.3), .removeFromParent()]))
+        addChild(banner)
+        bossBanner = banner
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -214,8 +238,18 @@ final class GameScene: SKScene {
         }
         lastUpdate = currentTime
 
+        beeHitMobs.removeAll()
         if !isGamePaused {
-            world.tick(dt: dt)
+            for event in world.tick(dt: dt) {
+                switch event {
+                case .waveStarted(_, let isBoss) where isBoss:
+                    showBossBanner()
+                case .beeHit(let mobID):
+                    beeHitMobs.insert(mobID)
+                default:
+                    break
+                }
+            }
         }
         reconcile()
         hud.update(hp: world.hive.hp, maxHP: world.hive.stats.maxHP,
@@ -245,11 +279,39 @@ final class GameScene: SKScene {
             let x = CGFloat(mob.position.x), y = CGFloat(mob.position.y)
             node.position = CGPoint(x: x, y: y)
             node.zRotation = atan2(-y, -x)
-            node.setHitFlash(mob.hitFlash > 0)
+            node.setHitFlash(mob.hitFlash > 0 || beeHitMobs.contains(mob.id))
         }
         for (id, node) in mobNodes where !liveMobs.contains(id) {
             node.removeFromParent()
             mobNodes[id] = nil
+        }
+
+        let beePositions = world.beePositions
+        while beeNodes.count < beePositions.count {
+            let node = GuardBeeNode()
+            node.zPosition = 2
+            addChild(node)
+            beeNodes.append(node)
+        }
+        while beeNodes.count > beePositions.count {
+            beeNodes.removeLast().removeFromParent()
+        }
+        for (node, p) in zip(beeNodes, beePositions) {
+            node.position = CGPoint(x: p.x, y: p.y)
+        }
+
+        let slowRadius = CGFloat(world.modifiers.slowRadius)
+        if slowRadius > 0 {
+            if slowField?.radius != slowRadius {
+                slowField?.removeFromParent()
+                let field = SlowFieldNode(radius: slowRadius)
+                field.zPosition = -3  // beneath the hive (glow is -2)
+                addChild(field)
+                slowField = field
+            }
+        } else if let field = slowField {
+            field.removeFromParent()
+            slowField = nil
         }
 
         var liveProjectiles = Set<Int>()

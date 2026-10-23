@@ -9,6 +9,8 @@ enum Palette {
     static let violet = UIColor(hex: 0x7A4FA3)
     static let sicklyGreen = UIColor(hex: 0x6E8B3D)
     static let white = UIColor(hex: 0xFFFFFF)
+    /// Slate-green beetle shell.
+    static let beetle = UIColor(hex: 0x4F6B5A)
 }
 
 private extension UIColor {

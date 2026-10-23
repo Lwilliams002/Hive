@@ -32,7 +32,14 @@ final class CardPickOverlay: SKNode {
             let rare = card.rarity != .common
             let shape = SKShapeNode(rectOf: CGSize(width: cardW, height: cardH), cornerRadius: 14)
             shape.fillColor = UIColor(red: 0x15 / 255, green: 0x12 / 255, blue: 0x0C / 255, alpha: 1)
-            shape.strokeColor = rare ? Palette.gold.withAlphaComponent(0.9) : Palette.amber.withAlphaComponent(0.6)
+            // Common amber, rare gold, epic white.
+            let accent: UIColor
+            switch card.rarity {
+            case .common: accent = Palette.amber
+            case .rare: accent = Palette.gold
+            case .epic: accent = Palette.white
+            }
+            shape.strokeColor = accent.withAlphaComponent(card.rarity == .common ? 0.6 : 0.9)
             shape.lineWidth = rare ? 2 : 1
             shape.position = CGPoint(x: 0, y: y)
             shape.name = "card:\(card.id)"
@@ -55,12 +62,17 @@ final class CardPickOverlay: SKNode {
             desc.horizontalAlignmentMode = .left
             desc.verticalAlignmentMode = .center
             desc.position = CGPoint(x: -cardW / 2 + 18, y: -14)
+            // Long descriptions (e.g. Honey Field) shrink to stay inside the card.
+            let maxDescW = cardW - 36
+            if desc.frame.width > maxDescW {
+                desc.fontSize *= maxDescW / desc.frame.width
+            }
             shape.addChild(desc)
 
             let tag = SKLabelNode(fontNamed: Typography.font)
             tag.text = card.rarity.rawValue.uppercased()
             tag.fontSize = 10
-            tag.fontColor = rare ? Palette.gold : Palette.amber
+            tag.fontColor = accent
             tag.alpha = 0.8
             tag.horizontalAlignmentMode = .right
             tag.verticalAlignmentMode = .center

@@ -40,6 +40,11 @@ public struct WaveDirector: Equatable {
         provider.isEndless ? max(1, startedCount) : min(currentWaveIndex + 1, totalWaves)
     }
 
+    /// Definition of the most recently started wave (nil before the first wave starts).
+    public var currentWaveDefinition: WaveDefinition? {
+        startedCount > 0 ? provider.wave(at: startedCount - 1) : nil
+    }
+
     public var isBossWave: Bool { provider.wave(at: waveNumber - 1)?.isBoss ?? false }
 
     /// `hpScale` of the most recently started wave (1.0 before the first wave). Every batch returned by
