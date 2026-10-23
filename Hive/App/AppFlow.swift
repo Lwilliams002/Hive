@@ -30,10 +30,10 @@ final class AppFlow {
     }
 
     /// Placeholder until the upgrades screen exists.
-    func showUpgrades() { showHome() }
+    func showUpgrades() { present(PlaceholderScene(title: "UPGRADES", flow: self, size: view.bounds.size)) }
 
     /// Placeholder until the level-select screen exists.
-    func showLevelSelect() { showHome() }
+    func showLevelSelect() { present(PlaceholderScene(title: "LEVELS", flow: self, size: view.bounds.size)) }
 
     func startLevel(id: Int) {
         guard let level = try? levels.load(id: id) else {

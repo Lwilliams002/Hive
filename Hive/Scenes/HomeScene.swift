@@ -1,9 +1,13 @@
 import SpriteKit
 
-/// Placeholder home screen: coin balance and a PLAY button. Replaced in a later task.
+/// Home screen: coin balance, the hive at its current visual tier, and navigation buttons.
 final class HomeScene: SKScene {
     private unowned let flow: AppFlow
     private let play = Button(title: "PLAY", name: "play", style: .filled)
+    private let levels = Button(title: "LEVELS", name: "levels", style: .outlined)
+    private let upgrades = Button(title: "UPGRADES", name: "upgrades", style: .outlined)
+    private let endless = Button(title: "ENDLESS", name: "endless", style: .outlined)
+    private var didStart = false
 
     init(flow: AppFlow, size: CGSize) {
         self.flow = flow
@@ -16,42 +20,87 @@ final class HomeScene: SKScene {
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
         backgroundColor = Palette.background
         removeAllChildren()
+        didStart = false
 
-        let top = size.height / 2
+        let w = size.width
+        let h = size.height
+
         let title = SKLabelNode(fontNamed: Typography.font)
-        title.text = "HOME"
-        title.fontSize = Typography.small
-        title.fontColor = Palette.gold
-        title.alpha = 0.5
+        title.attributedText = NSAttributedString(string: "HIVE", attributes: [
+            .font: UIFont(name: Typography.font, size: 12) ?? UIFont.systemFont(ofSize: 12),
+            .foregroundColor: Palette.gold,
+            .kern: 4,
+        ])
         title.verticalAlignmentMode = .center
-        title.position = CGPoint(x: 0, y: top - 80)
+        title.alpha = 0.5
+        title.position = CGPoint(x: 0, y: h / 2 - 68)
         addChild(title)
 
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        let coins = formatter.string(from: NSNumber(value: flow.state.coins)) ?? "\(flow.state.coins)"
         let balance = SKLabelNode(fontNamed: Typography.font)
-        balance.text = "\u{25C6} \(flow.state.coins)"
+        balance.text = "\u{25C6} \(coins)"
         balance.fontSize = 16
         balance.fontColor = Palette.gold
+        balance.horizontalAlignmentMode = .left
         balance.verticalAlignmentMode = .center
-        balance.position = CGPoint(x: 0, y: top - 108)
+        balance.position = CGPoint(x: -w / 2 + 24, y: h / 2 - 52)
         addChild(balance)
 
+        var tier = flow.state.upgrades.visualTier
         #if DEBUG
-        // Debug-only hive preview: launch with HIVE_PREVIEW_TIER=n to show that tier instead of PLAY.
-        if let raw = ProcessInfo.processInfo.environment["HIVE_PREVIEW_TIER"], let tier = Int(raw) {
-            addChild(HiveRenderer.makeHive(visualTier: tier))
-            return
-        }
+        if let raw = ProcessInfo.processInfo.environment["HIVE_PREVIEW_TIER"], let t = Int(raw) { tier = t }
         #endif
+        let hive = HiveRenderer.makeHive(visualTier: tier)
+        hive.position = CGPoint(x: 0, y: h * 0.14)
+        let scale: CGFloat = tier <= 4 ? 1.8 : (tier <= 8 ? 1.4 : 1.1)
+        hive.setScale(scale)
+        hive.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 240)))
+        addChild(hive)
+
+        let level = SKLabelNode(fontNamed: Typography.font)
+        level.text = "LEVEL \(flow.state.currentLevel)"
+        level.fontSize = 14
+        level.fontColor = Palette.gold
+        level.alpha = 0.8
+        level.verticalAlignmentMode = .center
+        level.position = CGPoint(x: 0, y: h * 0.14 - (80 * scale + 24))
+        addChild(level)
 
         play.isEnabled = !flow.levels.availableLevelIDs().isEmpty
-        play.position = .zero
-        addChild(play)
+        endless.isEnabled = false
+        let pitch: CGFloat = 52 + 16
+        var y = -h * 0.12
+        for button in [play, levels, upgrades, endless] {
+            button.position = CGPoint(x: 0, y: y)
+            addChild(button)
+            y -= pitch
+        }
+
+        let sub = SKLabelNode(fontNamed: Typography.font)
+        sub.text = "Unlocks after level 10"
+        sub.fontSize = 11
+        sub.fontColor = Palette.white
+        sub.alpha = 0.6
+        sub.verticalAlignmentMode = .center
+        sub.position = CGPoint(x: 0, y: endless.position.y - 26 - 14)
+        addChild(sub)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, play.parent != nil, play.contains(touch.location(in: self)) else { return }
-        let ids = flow.levels.availableLevelIDs()
-        guard let maxID = ids.max() else { return }
-        flow.startLevel(id: min(flow.state.currentLevel, maxID))
+        guard !didStart, let touch = touches.first else { return }
+        let p = touch.location(in: self)
+        if play.contains(p) {
+            guard let maxID = flow.levels.availableLevelIDs().max() else { return }
+            didStart = true
+            flow.startLevel(id: min(flow.state.currentLevel, maxID))
+        } else if levels.contains(p) {
+            didStart = true
+            flow.showLevelSelect()
+        } else if upgrades.contains(p) {
+            didStart = true
+            flow.showUpgrades()
+        }
     }
 }
