@@ -55,6 +55,11 @@ public struct PermanentUpgrades: Codable, Equatable {
 
     public static func cost(forTier t: Int) -> Int { 20 + 30 * t * t }
 
+    /// Highest cleared level needed before tier `t` can be bought.
+    public static func unlockLevel(forTier t: Int) -> Int {
+        t >= 9 ? 16 : (t >= 6 ? 8 : 0)
+    }
+
     public func nextCost(for track: UpgradeTrack) -> Int? {
         let t = tier(of: track)
         return t >= PermanentUpgrades.maxTier ? nil : PermanentUpgrades.cost(forTier: t + 1)

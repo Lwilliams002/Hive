@@ -17,7 +17,10 @@ public struct World {
     public let runID: UUID
     public private(set) var startingCards: [UpgradeCard] = []
 
-    private let level: LevelDefinition
+    private let provider: WaveProvider
+    public var isEndless: Bool { provider.isEndless }
+    /// Waves whose mobs were all killed after the wave finished issuing (counted once per wave).
+    public private(set) var wavesCleared = 0
     private let cardPool: [UpgradeCard]
     private var rng: SeededRNG
     /// Shared id counter for mobs and projectiles.
@@ -40,10 +43,17 @@ public struct World {
     public init(level: LevelDefinition, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
                 startingCardCount: Int = 0, startingCardPool: [UpgradeCard]? = nil, seed: UInt64) {
-        self.level = level
+        self.init(provider: .fixed(level), hiveStats: hiveStats, cardPool: cardPool,
+                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, seed: seed)
+    }
+
+    public init(provider: WaveProvider, hiveStats: HiveStats = .base,
+                cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
+                startingCardPool: [UpgradeCard]? = nil, startingCardCount: Int = 0, seed: UInt64) {
+        self.provider = provider
         self.cardPool = cardPool
         self.runID = UUID()
-        self.director = WaveDirector(level: level)
+        self.director = WaveDirector(provider: provider)
         self.hive = Hive(stats: hiveStats, hp: hiveStats.maxHP, cooldown: 0)
         self.rng = SeededRNG(seed: seed)
         let drawn = UpgradeCatalog.draw(count: startingCardCount, from: startingCardPool ?? cardPool, rng: &rng)
@@ -69,8 +79,7 @@ public struct World {
         if !spawns.isEmpty {
             // Every wave issues its first spawn on the tick it starts, so a non-empty
             // batch after the previous wave's spawns are exhausted marks a new wave.
-            if spawnsLeftInWave <= 0 && wavesStarted < level.waves.count {
-                let wave = level.waves[wavesStarted]
+            if spawnsLeftInWave <= 0, let wave = provider.wave(at: wavesStarted) {
                 wavesStarted += 1
                 spawnsLeftInWave = wave.spawns.reduce(0) { $0 + $1.count }
                 events.append(.waveStarted(number: wavesStarted, isBoss: wave.isBoss))
@@ -167,6 +176,7 @@ public struct World {
 
         // (7) remove dead mobs
         mobs.removeAll { deadIDs.contains($0.id) }
+        countClearedWave()
 
         // Nectar threshold: pause into card pick, skipping the rest of the tick — unless this kill also
         // empties the level, in which case the pick is skipped (nectar carries over) and step 12 clears.
@@ -247,6 +257,7 @@ public struct World {
                 }
             }
             mobs.removeAll { beeKills.contains($0.id) }
+            countClearedWave()
             // Same rule as step 6: pause into a pick unless these kills emptied the level.
             if beeThresholds > 0 && !(director.allSpawnsIssued && mobs.isEmpty) {
                 pendingPicks = beeThresholds - 1
@@ -262,6 +273,7 @@ public struct World {
         }
 
         // (12) cleared
+        countClearedWave()
         if phase == .playing && director.allSpawnsIssued && mobs.isEmpty {
             phase = .cleared
             events.append(.levelCleared)
@@ -304,6 +316,13 @@ public struct World {
     }
 
     // MARK: - Helpers
+
+    /// Counts the running wave as cleared once it has issued everything and no mob is left (once per wave).
+    private mutating func countClearedWave() {
+        if wavesCleared < wavesStarted && director.currentWaveFullyIssued && mobs.isEmpty {
+            wavesCleared += 1
+        }
+    }
 
     private mutating func drawCards() -> [UpgradeCard] {
         UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng, epicWeight: min(25, 5 + 3 * nectar.level))
