@@ -1,5 +1,4 @@
 import XCTest
-import CryptoKit
 @testable import HiveCore
 
 /// Levels whose probe bounds could not be met within the tuning budget (difficulty tuned in 0.025 D steps,
@@ -60,7 +59,7 @@ final class LevelCurveProbeTests: XCTestCase {
 
     func testLevelOneUnchanged() throws {
         let data = try ProbeHarness.levelData(1)
-        let hex = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hex = PortableSHA256.hexDigest(data)
         XCTAssertEqual(hex, Self.levelOneSHA256, "level_001.json changed; it is hand-kept and must not be regenerated")
     }
 
