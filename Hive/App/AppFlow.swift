@@ -1,17 +1,27 @@
 import SpriteKit
+import UIKit
 import HiveCore
 
-/// Owns the persistent game state and moves between scenes.
+/// Owns the persistent game state and the ad provider, and moves between scenes. The only app file that reads the
+/// wall clock or calls `ads.show*`; scenes read ad availability through `reviveAllowed` / `rewardedReady` (M4 R27).
 final class AppFlow {
     let view: SKView
     let levels: LevelLoader
+    /// `RootViewController`: what ads and the consent prompts are presented from (R22).
+    let presenter: UIViewController
+    let ads: AdProviding
     private let store: SaveStore
     private(set) var state = GameState()
+    /// True once `ads.start` completed successfully; every ad gate and `reviveAllowed` hang off it.
+    private(set) var adsStarted = false
+    private var adsStarting = false
 
-    init(view: SKView, store: SaveStore, levels: LevelLoader) {
+    init(view: SKView, store: SaveStore, levels: LevelLoader, presenter: UIViewController, ads: AdProviding) {
         self.view = view
         self.store = store
         self.levels = levels
+        self.presenter = presenter
+        self.ads = ads
     }
 
     /// The level PLAY starts: the next uncleared level, capped at the highest level that ships.
@@ -27,6 +37,11 @@ final class AppFlow {
         } catch {
             print("Hive: save unreadable, starting fresh: \(error)")
             state = GameState()
+        }
+        // Consent already ran once: start the SDK (UMP re-prompts only if it must). Deferred one turn because the
+        // root view is not yet in the window during `willConnectTo`.
+        if state.consentPrompted {
+            DispatchQueue.main.async { [weak self] in self?.startAds() }
         }
         #if DEBUG
         // Screenshot hook: open a screen directly on devices where taps cannot be scripted.
@@ -52,6 +67,9 @@ final class AppFlow {
     }
 
     func startLevel(id: Int) {
+        // The one re-arm point a run can reach after a failed load (every show is gated on readiness); a no-op
+        // while a load is in flight.
+        if adsStarted { ads.preload() }
         guard let level = try? levels.load(id: id) else {
             showHome()
             return
@@ -69,6 +87,7 @@ final class AppFlow {
     }
 
     func startEndless() {
+        if adsStarted { ads.preload() }
         guard state.endlessUnlocked else {
             showHome()
             return
@@ -108,9 +127,16 @@ final class AppFlow {
                          revived: world.reviveUsed)
     }
 
-    /// Records the run once (idempotent by run id) and saves immediately when it counted.
+    /// Records the run once (idempotent by run id) and saves immediately when it counted. The first recorded story
+    /// run end also triggers the consent flow (R21) on the next run-loop turn, after `GameScene` has added the
+    /// `EndOverlay` in this same frame, so the prompts appear over the results card.
     func runEnded(_ result: RunResult) {
         if state.record(result) { save() }
+        if AdRules.shouldPromptConsent(state, after: result) {
+            state.consentPrompted = true
+            save()
+            DispatchQueue.main.async { [weak self] in self?.startAds() }
+        }
     }
 
     @discardableResult
@@ -118,6 +144,63 @@ final class AppFlow {
         guard state.purchase(track) else { return false }
         save()
         return true
+    }
+
+    // MARK: Ads (M4)
+
+    /// Runs the provider's consent → ATT → SDK start chain once; the provider preloads itself on success.
+    func startAds() {
+        guard !adsStarted, !adsStarting else { return }
+        adsStarting = true
+        ads.start(from: presenter) { [weak self] ok in
+            self?.adsStarting = false
+            self?.adsStarted = ok
+        }
+    }
+
+    /// World may enter `.downed` instead of `.gameOver` only once the ad system is up (R3); whether an ad is
+    /// actually loaded is checked at that moment through `rewardedReady`.
+    var reviveAllowed: Bool { adsStarted }
+
+    /// A rewarded ad can be presented right now; overlays add their rewarded controls only when this is true (R25).
+    var rewardedReady: Bool { adsStarted && ads.isRewardedReady }
+
+    /// Presents the loaded rewarded ad. `onDismiss` runs exactly once, after `onReward` if granted — at once when
+    /// no ad is ready. The 90 s interstitial cooldown starts whenever a rewarded ad was actually shown, granted or not.
+    func showRewarded(onReward: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+        guard rewardedReady else {
+            onDismiss()
+            return
+        }
+        ads.showRewarded(from: presenter, onReward: onReward, onDismiss: { [weak self] in
+            if let self = self {
+                AdRules.noteRewardedShown(&self.state, now: Date().timeIntervalSince1970)
+                self.save()
+            }
+            onDismiss()
+        })
+    }
+
+    /// True when an interstitial is loaded and the 3 / 3 / 90 s rule allows one (R12–R14).
+    func interstitialPermitted(now: TimeInterval) -> Bool {
+        adsStarted && ads.isInterstitialReady && AdRules.mayShowInterstitial(state, now: now)
+    }
+
+    /// Shows an interstitial when permitted and navigates on its dismiss; navigates at once otherwise. The slot is
+    /// consumed when the show is requested, so a failed present yields fewer ads, never more (R12).
+    func showInterstitialIfPermitted(then navigate: @escaping () -> Void) {
+        guard interstitialPermitted(now: Date().timeIntervalSince1970) else { return navigate() }
+        AdRules.noteInterstitialShown(&state)
+        save()
+        ads.showInterstitial(from: presenter, onDismiss: navigate)
+    }
+
+    /// Pays the double-coins bonus for a recorded run once (R20) and saves when it counted.
+    @discardableResult
+    func awardBonus(_ result: RunResult) -> Bool {
+        let ok = state.awardBonus(runID: result.runID, coins: result.coinsEarned)
+        if ok { save() }
+        return ok
     }
 
     private func save() {
