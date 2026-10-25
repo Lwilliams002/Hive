@@ -152,4 +152,89 @@ final class CardMechanicsTests: XCTestCase {
         m.apply(.damageMultiplier(2))     // stat effects are ignored here
         XCTAssertEqual(m.slowFactor, 0.4225, accuracy: 1e-9)
     }
+
+    // MARK: - M3 gaps pinned before the World split (M4 Task 1)
+
+    func isKill(_ e: GameEvent) -> Bool { if case .mobKilled = e { return true }; return false }
+
+    /// Parks mob 0 at `position` with `hp` before every tick (so the orbiting bees meet it) and returns the
+    /// events of the first tick that kills it, or nil after 90 ticks (1.5 s).
+    func tickUntilBeeKill(_ w: inout World, position: Vec2, hp: Double) -> [GameEvent]? {
+        for _ in 0..<90 {
+            w.debugSetMob(index: 0, position: position, hp: hp)
+            let ev = w.tick(dt: 1.0 / 60)
+            if ev.contains(where: isKill) { return ev }
+        }
+        return nil
+    }
+
+    func testBeeKillAddsNectarAndOpensPick() {
+        var w = World(level: emptyLevel(), hiveStats: silentHive, seed: 1)
+        w.debugApplyCard(card("guard_bees"))
+        w.debugAddMob(type: .bear, position: Vec2(72, 0))
+        guard let ev = tickUntilBeeKill(&w, position: Vec2(72, 0), hp: 5) else { return XCTFail("no bee kill within 1.5 s") }
+        XCTAssertTrue(ev.contains { if case .beeHit = $0 { return true }; return false })
+        XCTAssertTrue(ev.contains { if case .mobKilled(_, .bear, _) = $0 { return true }; return false })
+        XCTAssertEqual(ev.filter { $0 == .nectarThreshold }.count, 1)
+        // Bear nectar 15 crosses the first threshold (8) and carries 7 over.
+        XCTAssertEqual(w.nectar.level, 1)
+        XCTAssertEqual(w.nectar.current, 7)
+        guard case .pickingCards(let cards) = w.phase else { return XCTFail("expected pickingCards, got \(w.phase)") }
+        XCTAssertEqual(cards.count, 3)
+        XCTAssertTrue(w.mobs.isEmpty)
+    }
+
+    func testBeeKillThatClearsLevelSkipsPick() {
+        var w = World(level: oneBearBossLevel(), hiveStats: silentHive, seed: 1)
+        _ = w.tick(dt: 1.0 / 60)          // the bear spawns; nothing else is ever issued
+        XCTAssertTrue(w.director.allSpawnsIssued)
+        w.debugApplyCard(card("guard_bees"))
+        guard let ev = tickUntilBeeKill(&w, position: Vec2(72, 0), hp: 5) else { return XCTFail("no bee kill within 1.5 s") }
+        // The kill empties a fully issued level: the pick is skipped (nectar carries over) and the level clears.
+        XCTAssertFalse(ev.contains(.nectarThreshold))
+        XCTAssertEqual(ev.filter { $0 == .levelCleared }.count, 1)
+        XCTAssertEqual(w.phase, .cleared)
+        XCTAssertEqual(w.nectar.level, 1)
+        XCTAssertEqual(w.wavesCleared, 1)
+    }
+
+    func testSplashStillHitsNeighborsWhenShotKills() {
+        var w = World(level: emptyLevel(), hiveStats: silentHive, seed: 1)
+        w.debugApplyCard(card("pollen_cloud"))
+        w.debugAddMob(type: .wasp, position: Vec2(200, 0))
+        w.debugAddMob(type: .wasp, position: Vec2(200, 25))
+        w.debugAddMob(type: .wasp, position: Vec2(200, -25))
+        let centerID = w.mobs[0].id
+        w.debugSetMob(index: 0, position: Vec2(200, 0), hp: 10)
+        w.debugAddProjectile(at: Vec2(200, 0), velocity: .zero, damage: 10)
+        let ev = w.tick(dt: 1.0 / 60)
+        // The shot kills the centre wasp; its neighbours still take the 40 % splash and flash.
+        XCTAssertTrue(ev.contains { if case .mobKilled(let id, _, _) = $0 { return id == centerID }; return false })
+        XCTAssertEqual(ev.filter { if case .mobHit = $0 { return true }; return false }.count, 3)
+        XCTAssertEqual(w.mobs.count, 2)
+        XCTAssertEqual(w.mobs.map(\.hp), [16, 16])
+        XCTAssertEqual(w.nectar.current, 1)
+        XCTAssertTrue(w.projectiles.isEmpty)
+    }
+
+    func testBeeStingRespectsArmorMinimumOne() {
+        /// Hp of a beetle parked on the orbit after the first sting (nil if no bee reached it within 1.5 s).
+        func hpAfterFirstSting(royalGuard: Bool) -> Double? {
+            var w = World(level: emptyLevel(), hiveStats: silentHive, seed: 1)
+            w.debugApplyCard(card("guard_bees"))
+            if royalGuard { w.debugApplyCard(card("royal_guard")) }
+            w.debugAddMob(type: .beetle, position: Vec2(72, 0))
+            let beetleID = w.mobs[0].id
+            for _ in 0..<90 {
+                w.debugSetMob(index: 0, position: Vec2(72, 0), hp: w.mobs[0].hp)
+                let ev = w.tick(dt: 1.0 / 60)
+                if ev.contains(.beeHit(mobID: beetleID)) { return w.mobs[0].hp }
+            }
+            return nil
+        }
+        guard let plain = hpAfterFirstSting(royalGuard: false) else { return XCTFail("no sting within 1.5 s") }
+        XCTAssertEqual(plain, 89, accuracy: 1e-9)      // max(1, 6 − 5) = 1
+        guard let royal = hpAfterFirstSting(royalGuard: true) else { return XCTFail("no royal sting within 1.5 s") }
+        XCTAssertEqual(royal, 83, accuracy: 1e-9)      // 12 − 5 = 7
+    }
 }

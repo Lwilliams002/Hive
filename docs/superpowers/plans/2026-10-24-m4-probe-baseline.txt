@@ -1,0 +1,14 @@
+BalanceProbe(greedy): cleared 11 / 20, boss reached 20 / 20, avg end wave 5.00
+BalanceProbe(midgame): cleared 20 / 20, boss reached 20 / 20, avg end wave 5.00
+BalanceProbe: cleared 8 / 20, boss reached 20 / 20, avg end wave 5.00
+Curve L10: atExpected 17/20, behind 7/20 (behind avg end wave 3.50)
+Curve L13: atExpected 20/20, behind 4/20 (behind avg end wave 2.40)
+Curve L16: atExpected 14/20, behind 8/20 (behind avg end wave 4.10)
+Curve L20: atExpected 16/20, behind 5/20 (behind avg end wave 2.75)
+Curve L25: atExpected 18/20, behind 5/20 (behind avg end wave 3.20)
+Curve L2: atExpected 16/20, behind 11/20 (behind avg end wave 4.95)
+Curve L30: atExpected 17/20, behind 7/20 (behind avg end wave 4.25)
+Curve L3: atExpected 17/20, behind 14/20 (behind avg end wave 4.85)
+Curve L4: atExpected 16/20, behind 9/20 (behind avg end wave 3.60)
+Curve L5: atExpected 12/20, behind 4/20 (behind avg end wave 4.35)
+Curve L7: atExpected 13/20, behind 4/20 (behind avg end wave 3.40)
