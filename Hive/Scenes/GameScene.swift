@@ -11,6 +11,7 @@ protocol Overlay: SKNode {
 extension CardPickOverlay: Overlay {}
 extension EndOverlay: Overlay {}
 extension PauseOverlay: Overlay {}
+extension ReviveOverlay: Overlay {}
 
 final class GameScene: SKScene {
     private unowned let flow: AppFlow
@@ -40,6 +41,9 @@ final class GameScene: SKScene {
     private var overlay: Overlay?
     /// Game-level pause (distinct from `SKNode.isPaused`, which would also stop overlay rendering/actions).
     private var isGamePaused = false
+    /// An ad owns the screen (M4): the current overlay stays up and `touchesBegan` is inert until the ad's `onDismiss`
+    /// clears it. Set before every `flow.showRewarded` / interstitial call, since `onDismiss` may run synchronously.
+    private var awaitingAd = false
 
     convenience init(level: LevelDefinition, levelId: Int, stats: HiveStats, cardPool: [UpgradeCard],
                      startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
@@ -143,9 +147,20 @@ final class GameScene: SKScene {
         overlay?.removeFromParent()
         overlay = nil
         isGamePaused = false
+        awaitingAd = false
+        // The hive may enter `.downed` instead of `.gameOver` only once the ad system is up (R3); whether an ad is
+        // actually loaded is checked at that moment in `presentOverlayIfNeeded`.
         world = World(provider: provider, hiveStats: stats, cardPool: cardPool,
                       startingCardPool: startingCardPool, startingCardCount: startingCardCount,
-                      seed: UInt64(Date().timeIntervalSince1970 * 1000))
+                      seed: UInt64(Date().timeIntervalSince1970 * 1000),
+                      reviveAllowed: flow.reviveAllowed)
+        #if DEBUG
+        // `HIVE_START_HP=N` (DEBUG builds only): the hive starts the run at N hp, clamped to max; `0` downs it on the
+        // first ticking frame, before wave 1's delay elapses (Task 11's revive-and-clear walkthrough).
+        if let raw = ProcessInfo.processInfo.environment["HIVE_START_HP"], let hp = Double(raw) {
+            world.debugSetHiveHP(hp)
+        }
+        #endif
         lastUpdate = nil
         showStartingCards(world.startingCards)
     }
@@ -202,6 +217,8 @@ final class GameScene: SKScene {
     #endif
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // An ad owns the screen: no overlay taps, no pause (the ad's `onDismiss` clears the flag).
+        guard !awaitingAd else { return }
         guard let touch = touches.first else { return }
         if let overlay = overlay {
             overlay.handleTouch(at: touch.location(in: overlay))
@@ -234,8 +251,17 @@ final class GameScene: SKScene {
             overlay = o
             addChild(o)
         case .downed:
-            // Task 7 replaces this with ReviveOverlay; until then a downed hive falls at once.
-            world.abandonRevive()
+            // No rewarded ad loaded: the hive falls at once, never a broken prompt (R3, R25); the next frame's
+            // terminal arm records the loss. Nothing is recorded here: a revived run keeps playing on the same runID.
+            guard flow.rewardedReady else {
+                world.abandonRevive()
+                return
+            }
+            let o = ReviveOverlay(viewSize: size,
+                                  onRevive: { [weak self] in self?.watchReviveAd() },
+                                  onGiveUp: { [weak self] in self?.giveUpRevive() })
+            overlay = o
+            addChild(o)
         case .cleared, .gameOver:
             guard lastReportedRunID != world.runID else { return }
             lastReportedRunID = world.runID
@@ -254,6 +280,37 @@ final class GameScene: SKScene {
             overlay = o
             addChild(o)
         }
+    }
+
+    /// REVIVE: shows the rewarded ad and applies the outcome on **dismiss**, not on grant, so play never resumes under
+    /// the ad's end card. The pending state is set before the call because `onDismiss` may run synchronously (fake
+    /// provider, or no ad ready after all); the dismiss re-checks the overlay, run and phase it started from.
+    private func watchReviveAd() {
+        guard let o = overlay as? ReviveOverlay, !awaitingAd else { return }
+        let runID = world.runID
+        var granted = false
+        awaitingAd = true
+        o.setWaiting()
+        flow.showRewarded(onReward: { granted = true }, onDismiss: { [weak self] in
+            guard let self = self else { return }
+            self.awaitingAd = false
+            guard self.overlay === o, self.world.runID == runID, self.world.phase == .downed else { return }
+            if granted {
+                self.world.revive()
+            } else {
+                self.world.abandonRevive()
+            }
+            o.removeFromParent()
+            self.overlay = nil
+            self.lastUpdate = nil   // the first frame back ticks dt = 0
+        })
+    }
+
+    /// GIVE UP: the hive falls for good; the next frame's terminal arm records the loss once and shows HIVE FELL.
+    private func giveUpRevive() {
+        world.abandonRevive()
+        overlay?.removeFromParent()
+        overlay = nil
     }
 
     override func update(_ currentTime: TimeInterval) {
