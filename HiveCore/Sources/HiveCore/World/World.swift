@@ -21,6 +21,12 @@ public struct World {
     public private(set) var reviveAllowed: Bool
     /// True once `revive()` has been used; a second fall goes straight to `.gameOver` (R2).
     public private(set) var reviveUsed = false
+    /// Cards the premium (ad-gated) fourth slot draws from: the locked pool, disjoint from `cardPool` (R8); empty
+    /// means the slot never appears (R9).
+    let premiumPool: [UpgradeCard]
+    /// The premium card rolled for the current pick (R7, R10): set in `openPick()`, cleared by `choose(_:)`, `nil`
+    /// when the roll missed or `premiumPool` is empty. Taken through `choose(_:)` like any other card (R6).
+    public private(set) var premiumOffer: UpgradeCard?
 
     private let provider: WaveProvider
     public var isEndless: Bool { provider.isEndless }
@@ -28,6 +34,9 @@ public struct World {
     public private(set) var wavesCleared = 0
     private let cardPool: [UpgradeCard]
     var rng: SeededRNG
+    /// Side stream for the premium roll and draw, seeded from `seed ^ premiumSeedSalt` (R7). The main `rng` is
+    /// never consumed by the premium path, so probes, pick payloads and event streams are unchanged by `premiumPool`.
+    private var premiumRNG: SeededRNG
     /// Shared id counter for mobs and projectiles.
     private var nextID = 1
     /// Waves announced via `waveStarted` so far.
@@ -49,20 +58,24 @@ public struct World {
     static let reviveHPFraction = 0.5
     static let reviveBossDelay = 1.5
     static let reviveClearRadius = 150.0
+    /// Premium slot (R7, R10): the side stream's seed salt (nonzero, never derived from the main stream) and the
+    /// per-pick offer chance.
+    static let premiumSeedSalt: UInt64 = 0x9E37_79B9_7F4A_7C15
+    static let premiumOfferChance = 1.0 / 3.0
 
     public init(level: LevelDefinition, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
                 startingCardCount: Int = 0, startingCardPool: [UpgradeCard]? = nil, seed: UInt64,
-                reviveAllowed: Bool = false) {
+                reviveAllowed: Bool = false, premiumPool: [UpgradeCard] = []) {
         self.init(provider: .fixed(level), hiveStats: hiveStats, cardPool: cardPool,
                   startingCardPool: startingCardPool, startingCardCount: startingCardCount, seed: seed,
-                  reviveAllowed: reviveAllowed)
+                  reviveAllowed: reviveAllowed, premiumPool: premiumPool)
     }
 
     public init(provider: WaveProvider, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
                 startingCardPool: [UpgradeCard]? = nil, startingCardCount: Int = 0, seed: UInt64,
-                reviveAllowed: Bool = false) {
+                reviveAllowed: Bool = false, premiumPool: [UpgradeCard] = []) {
         self.provider = provider
         self.cardPool = cardPool
         self.runID = UUID()
@@ -70,6 +83,8 @@ public struct World {
         self.hive = Hive(stats: hiveStats, hp: hiveStats.maxHP, cooldown: 0)
         self.reviveAllowed = reviveAllowed
         self.rng = SeededRNG(seed: seed)
+        self.premiumPool = premiumPool
+        self.premiumRNG = SeededRNG(seed: seed ^ World.premiumSeedSalt)
         let drawn = UpgradeCatalog.draw(count: startingCardCount, from: startingCardPool ?? cardPool, rng: &rng)
         for card in drawn { apply(card: card) }
         self.startingCards = drawn
@@ -245,6 +260,7 @@ public struct World {
     /// No-op outside `.pickingCards`.
     public mutating func choose(_ card: UpgradeCard) {
         guard case .pickingCards = phase else { return }
+        premiumOffer = nil   // the offer belongs to the pick being consumed; a chained pick rolls afresh in openPick() (R7)
         apply(card: card)
         if pendingPicks > 0 {
             pendingPicks -= 1
@@ -313,9 +329,21 @@ public struct World {
         UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng, epicWeight: min(25, 5 + 3 * nectar.level))
     }
 
-    /// The single pick-open site: every `.pickingCards` phase is entered through here.
+    /// The single pick-open site: every `.pickingCards` phase is entered through here, and every pick (chained
+    /// ones included) rolls its premium offer here on the side stream (R10).
     private mutating func openPick() {
-        phase = .pickingCards(drawCards())
+        let cards = drawCards()
+        premiumOffer = rollPremiumOffer()
+        phase = .pickingCards(cards)
+    }
+
+    /// Rolls the premium slot on `premiumRNG`: no roll at all when `premiumPool` is empty (R10), otherwise a
+    /// `premiumOfferChance` chance of one card drawn from the locked pool with the main draw's epic weight.
+    /// Never touches the main stream (R7).
+    private mutating func rollPremiumOffer() -> UpgradeCard? {
+        guard !premiumPool.isEmpty, premiumRNG.unitDouble() < World.premiumOfferChance else { return nil }
+        return UpgradeCatalog.draw(count: 1, from: premiumPool, rng: &premiumRNG,
+                                   epicWeight: min(25, 5 + 3 * nectar.level)).first
     }
 
     /// Opens a card pick when `thresholds` were crossed this tick, unless those kills also emptied a fully

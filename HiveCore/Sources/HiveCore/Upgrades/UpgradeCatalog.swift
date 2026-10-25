@@ -39,6 +39,13 @@ public enum UpgradeCatalog {
         all.filter { $0.unlockLevel <= level }
     }
 
+    /// The premium slot's pool: the cards still locked at `level` (`unlockLevel > level`), the exact complement of
+    /// `pool(unlockedThrough:)`. Story level 1 (`poolLevel` 0) offers the four epics; empty from level 15, which
+    /// hides the slot (R8, R9).
+    public static func locked(unlockedThrough level: Int) -> [UpgradeCard] {
+        all.filter { $0.unlockLevel > level }
+    }
+
     static func weight(_ rarity: CardRarity, epicWeight: Double) -> Double {
         switch rarity {
         case .common: return 70
