@@ -40,6 +40,11 @@ final class Button: SKNode {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
 
+    /// Replaces the caption in place (DOUBLE COINS becomes DOUBLED once the bonus is banked).
+    func setTitle(_ text: String) {
+        label.text = text
+    }
+
     /// `point` is in the parent's coordinate space. Disabled or hidden buttons never contain a point.
     override func contains(_ point: CGPoint) -> Bool {
         guard isEnabled, !isHidden, parent != nil else { return false }

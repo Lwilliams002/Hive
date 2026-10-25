@@ -274,9 +274,14 @@ final class GameScene: SKScene {
                     onContinue = { [weak self] in self?.flow.startLevel(id: nextId) }
                 }
             }
+            // DOUBLE COINS only when a rewarded ad is ready now and the run pays out: a story clear or any endless end
+            // (R19), never a story loss. `coinsEarned` is 0 for an endless death before wave 1, which the core's bonus
+            // ledger would refuse anyway, so the button is never shown broken (R25).
+            let offerDouble = flow.rewardedReady && (result.cleared || result.mode == .endless) && result.coinsEarned > 0
             let o = EndOverlay(result: result, previousBest: previousBest, viewSize: size, onContinue: onContinue,
                                onRetry: { [weak self] in self?.startRun() },
-                               onHome: { [weak self] in self?.flow.showHome() })
+                               onHome: { [weak self] in self?.flow.showHome() },
+                               onDoubleCoins: offerDouble ? { [weak self] in self?.watchDoubleCoinsAd(result) } : nil)
             overlay = o
             addChild(o)
         }
@@ -311,6 +316,28 @@ final class GameScene: SKScene {
         world.abandonRevive()
         overlay?.removeFromParent()
         overlay = nil
+    }
+
+    /// DOUBLE COINS: shows the rewarded ad and banks the bonus on **dismiss** (R20: bonus = `coinsEarned`, already
+    /// multiplied once in `makeRunResult`, never again). Idempotent three ways: the button is disabled while pending,
+    /// `touchesBegan` is inert while `awaitingAd`, and the core's bonus ledger refuses a second payout per run. The
+    /// pending state is set before the call because `onDismiss` may run synchronously.
+    private func watchDoubleCoinsAd(_ result: RunResult) {
+        guard let end = overlay as? EndOverlay, !awaitingAd else { return }
+        awaitingAd = true
+        end.setDoublePending()
+        var granted = false
+        flow.showRewarded(onReward: { granted = true }, onDismiss: { [weak self] in
+            guard let self = self else { return }
+            self.awaitingAd = false
+            guard self.overlay === end else { return }
+            if granted, self.flow.awardBonus(result) {
+                end.setDoubled(total: result.coinsEarned * 2)
+            } else {
+                // Cancelled or failed: the button returns only while another ad is ready, else it hides (R25).
+                end.setDoubleAvailable(self.flow.rewardedReady)
+            }
+        })
     }
 
     override func update(_ currentTime: TimeInterval) {
