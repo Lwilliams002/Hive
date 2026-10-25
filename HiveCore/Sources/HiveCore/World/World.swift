@@ -2,7 +2,7 @@ import Foundation
 
 public struct World {
     public private(set) var hive: Hive
-    public private(set) var mobs: [Mob] = []
+    public internal(set) var mobs: [Mob] = []
     public private(set) var projectiles: [Projectile] = []
     public private(set) var director: WaveDirector
     public private(set) var phase: RunPhase = .playing
@@ -10,7 +10,7 @@ public struct World {
     public private(set) var nectar = NectarMeter()
     public private(set) var modifiers = RunModifiers()
     /// Guard bees orbiting the hive (`modifiers.guardBeeCount` of them).
-    public private(set) var bees: [GuardBee] = []
+    public internal(set) var bees: [GuardBee] = []
 
     public static let spawnRadius: Double = 520
 
@@ -22,7 +22,7 @@ public struct World {
     /// Waves whose mobs were all killed after the wave finished issuing (counted once per wave).
     public private(set) var wavesCleared = 0
     private let cardPool: [UpgradeCard]
-    private var rng: SeededRNG
+    var rng: SeededRNG
     /// Shared id counter for mobs and projectiles.
     private var nextID = 1
     /// Waves announced via `waveStarted` so far.
@@ -32,13 +32,13 @@ public struct World {
     /// Extra card picks owed when one tick's kills crossed more than one nectar threshold.
     private var pendingPicks = 0
 
-    private static let hitFlashDuration = 0.08
+    static let hitFlashDuration = 0.08
     /// Seconds between hits from a boss parked at the hive edge.
     private static let bossAttackInterval = 1.0
     private static let spreadRadians = 10.0 * .pi / 180
     /// Escorts never spawn closer to the hive than this (≈1.5 s of hive fire before contact).
-    private static let escortMinDistance = 140.0
-    private static let escortJitterRadians = 15.0 * .pi / 180
+    static let escortMinDistance = 140.0
+    static let escortJitterRadians = 15.0 * .pi / 180
 
     public init(level: LevelDefinition, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
@@ -97,15 +97,7 @@ public struct World {
 
         // (3b) boss escorts. Only mobs present now (including this tick's spawns) count down; escorts are
         // appended after `preexistingMobCount`, so like other new spawns they skip movement this tick.
-        for i in 0..<mobs.count {
-            guard let escort = mobs[i].type.stats.escort else { continue }
-            precondition(escort.every > 0, "escort interval must be positive")
-            mobs[i].escortTimer -= dt
-            while mobs[i].escortTimer <= 0 {
-                spawnEscort(escort, parentIndex: i, events: &events)
-                mobs[i].escortTimer += escort.every
-            }
-        }
+        tickEscorts(dt: dt, events: &events)
 
         // (4) move mobs toward origin; newly spawned mobs skip movement on their spawn tick so they start exactly on the spawn radius.
         // Bosses stop at the hive edge (Hive.radius + their radius) instead of overlapping it.
@@ -146,26 +138,9 @@ public struct World {
                 projectiles[p].hitMobIDs.append(mob.id)
                 events.append(.mobHit(id: mob.id))
                 if mobs[m].hp <= 0 {
-                    deadIDs.insert(mob.id)
-                    events.append(.mobKilled(id: mob.id, type: mob.type, at: mobs[m].position))
-                    if nectar.add(mob.type.stats.nectar) { thresholdsCrossed += 1 }
+                    registerKill(m, deadIDs: &deadIDs, thresholds: &thresholdsCrossed, events: &events)
                 }
-                // Splash: other alive mobs near the hit mob take a fraction of the raw damage (never chains).
-                if modifiers.splashRadius > 0 && modifiers.splashFraction > 0 {
-                    let center = mobs[m].position
-                    for n in mobs.indices where n != m && !deadIDs.contains(mobs[n].id) {
-                        guard mobs[n].position.distance(to: center) < modifiers.splashRadius else { continue }
-                        // Armor can absorb the whole splash; such a graze neither flashes nor reports a hit.
-                        guard splashDamage(raw * modifiers.splashFraction, to: &mobs[n]) > 0 else { continue }
-                        mobs[n].hitFlash = World.hitFlashDuration
-                        events.append(.mobHit(id: mobs[n].id))
-                        if mobs[n].hp <= 0 {
-                            deadIDs.insert(mobs[n].id)
-                            events.append(.mobKilled(id: mobs[n].id, type: mobs[n].type, at: mobs[n].position))
-                            if nectar.add(mobs[n].type.stats.nectar) { thresholdsCrossed += 1 }
-                        }
-                    }
-                }
+                applySplash(from: m, raw: raw, deadIDs: &deadIDs, thresholds: &thresholdsCrossed, events: &events)
                 projectiles[p].pierceRemaining -= 1
                 if projectiles[p].pierceRemaining < 0 {
                     spentProjectiles.insert(projectiles[p].id)
@@ -181,13 +156,7 @@ public struct World {
 
         // Nectar threshold: pause into card pick, skipping the rest of the tick — unless this kill also
         // empties the level, in which case the pick is skipped (nectar carries over) and step 12 clears.
-        let wouldClear = director.allSpawnsIssued && mobs.isEmpty
-        if thresholdsCrossed > 0 && !wouldClear {
-            pendingPicks = thresholdsCrossed - 1
-            phase = .pickingCards(drawCards())
-            events.append(.nectarThreshold)
-            return events
-        }
+        if openPickUnlessClearing(thresholds: thresholdsCrossed, events: &events) { return events }
 
         // (8) mob–hive contact. Non-boss mobs deal contact damage once and are removed.
         // Bosses parked at the hive edge stay alive and hit once on arrival, then every `bossAttackInterval` seconds.
@@ -235,38 +204,7 @@ public struct World {
 
         // (10b) guard bees: positions derived from `time`; each bee hits a touching mob at most every
         // `GuardBee.hitCooldown` seconds. Mobs killed here are removed this tick.
-        if !bees.isEmpty {
-            let positions = beePositions
-            var beeKills = Set<Int>()
-            var beeThresholds = 0
-            for b in bees.indices {
-                // Decay cooldowns; expired entries are dropped (absent ≡ ready), which also forgets removed mobs.
-                bees[b].cooldowns = bees[b].cooldowns.compactMapValues { $0 - dt > 0 ? $0 - dt : nil }
-                for m in mobs.indices where !beeKills.contains(mobs[m].id) {
-                    let reach = mobs[m].type.stats.radius + GuardBee.touchRadius
-                    guard positions[b].distance(to: mobs[m].position) < reach,
-                          bees[b].cooldowns[mobs[m].id, default: 0] <= 0 else { continue }
-                    damage(modifiers.beeDamage, to: &mobs[m])
-                    mobs[m].hitFlash = World.hitFlashDuration
-                    bees[b].cooldowns[mobs[m].id] = GuardBee.hitCooldown
-                    events.append(.beeHit(mobID: mobs[m].id))
-                    if mobs[m].hp <= 0 {
-                        beeKills.insert(mobs[m].id)
-                        events.append(.mobKilled(id: mobs[m].id, type: mobs[m].type, at: mobs[m].position))
-                        if nectar.add(mobs[m].type.stats.nectar) { beeThresholds += 1 }
-                    }
-                }
-            }
-            mobs.removeAll { beeKills.contains($0.id) }
-            countClearedWave()
-            // Same rule as step 6: pause into a pick unless these kills emptied the level.
-            if beeThresholds > 0 && !(director.allSpawnsIssued && mobs.isEmpty) {
-                pendingPicks = beeThresholds - 1
-                phase = .pickingCards(drawCards())
-                events.append(.nectarThreshold)
-                return events
-            }
-        }
+        if tickBees(dt: dt, events: &events) { return events }
 
         // (11) decay hit flash
         for i in mobs.indices {
@@ -290,9 +228,11 @@ public struct World {
         apply(card: card)
         if pendingPicks > 0 {
             pendingPicks -= 1
-            phase = .pickingCards(drawCards())
+            openPick()
+        } else if nectar.add(0) {
+            openPick()
         } else {
-            phase = nectar.add(0) ? .pickingCards(drawCards()) : .playing
+            phase = .playing
         }
     }
 
@@ -306,20 +246,10 @@ public struct World {
         }
     }
 
-    /// Current bee positions: bee `k` of `n` at angle `2.4 · time + 2πk/n` on the 72-pt orbit.
-    public var beePositions: [Vec2] {
-        let n = bees.count
-        let base = GuardBee.angularSpeed * time
-        return (0..<n).map { k in
-            let angle = base + 2 * .pi * Double(k) / Double(n)
-            return Vec2(cos(angle), sin(angle)) * GuardBee.orbitRadius
-        }
-    }
-
     // MARK: - Helpers
 
     /// Counts the running wave as cleared once it has issued everything and no mob is left (once per wave).
-    private mutating func countClearedWave() {
+    mutating func countClearedWave() {
         if wavesCleared < wavesStarted && director.currentWaveFullyIssued && mobs.isEmpty {
             wavesCleared += 1
         }
@@ -329,40 +259,36 @@ public struct World {
         UpgradeCatalog.draw(count: 3, from: cardPool, rng: &rng, epicWeight: min(25, 5 + 3 * nectar.level))
     }
 
+    /// The single pick-open site: every `.pickingCards` phase is entered through here.
+    private mutating func openPick() {
+        phase = .pickingCards(drawCards())
+    }
+
+    /// Opens a card pick when `thresholds` were crossed this tick, unless those kills also emptied a fully
+    /// issued level (then the pick is skipped, nectar carries over and step 12 clears). Returns whether the
+    /// tick must end here.
+    mutating func openPickUnlessClearing(thresholds: Int, events: inout [GameEvent]) -> Bool {
+        guard thresholds > 0, !(director.allSpawnsIssued && mobs.isEmpty) else { return false }
+        pendingPicks = thresholds - 1
+        openPick()
+        events.append(.nectarThreshold)
+        return true
+    }
+
+    /// The single kill-bookkeeping site: marks `mobs[m]` dead, reports the kill and banks its nectar,
+    /// counting any crossed threshold into `thresholds`.
+    mutating func registerKill(_ m: Int, deadIDs: inout Set<Int>, thresholds: inout Int, events: inout [GameEvent]) {
+        deadIDs.insert(mobs[m].id)
+        events.append(.mobKilled(id: mobs[m].id, type: mobs[m].type, at: mobs[m].position))
+        if nectar.add(mobs[m].type.stats.nectar) { thresholds += 1 }
+    }
+
     /// Every damage path goes through here: flat armor reduction, minimum 1 per hit.
-    private func damage(_ raw: Double, to mob: inout Mob) {
+    func damage(_ raw: Double, to mob: inout Mob) {
         mob.hp -= max(1, raw - mob.type.stats.armor)
     }
 
-    /// Splash damage to a neighbor: flat armor reduction with no minimum (armor can absorb it entirely).
-    /// Applies splash damage reduced by armor and returns the amount actually dealt (0 when fully absorbed).
-    @discardableResult
-    private func splashDamage(_ raw: Double, to mob: inout Mob) -> Double {
-        let applied = max(0, raw - mob.type.stats.armor)
-        mob.hp -= applied
-        return applied
-    }
-
-    /// Spawns `escort.count` mobs on the parent's bearing from the hive (each with its own ±15° jitter) at
-    /// `max(parent distance, escortMinDistance)`, so a boss parked at the hive edge never spawns escorts inside
-    /// contact range. Escorts inherit the parent's `hpScale`.
-    private mutating func spawnEscort(_ escort: EscortSpawn, parentIndex i: Int, events: inout [GameEvent]) {
-        let parent = mobs[i]
-        let bearing = atan2(parent.position.y, parent.position.x)
-        let distance = max(parent.position.length, World.escortMinDistance)
-        var ids: [Int] = []
-        for _ in 0..<escort.count {
-            let angle = bearing + (rng.unitDouble() * 2 - 1) * World.escortJitterRadians
-            let mob = Mob(id: makeID(), type: escort.type, position: Vec2(cos(angle), sin(angle)) * distance,
-                          hpScale: parent.hpScale)
-            mobs.append(mob)
-            ids.append(mob.id)
-            events.append(.mobSpawned(id: mob.id, type: mob.type))
-        }
-        events.append(.escortSpawned(parentID: parent.id, ids: ids))
-    }
-
-    private mutating func makeID() -> Int {
+    mutating func makeID() -> Int {
         defer { nextID += 1 }
         return nextID
     }
