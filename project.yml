@@ -8,10 +8,11 @@ packages:
   HiveCore:
     path: HiveCore
   # Remote SDKs for the app target only (HiveCore stays Foundation-only). Pinned exactly because Package.resolved
-  # is gitignored; Task 11 raises both to the newest 12.x / 3.x on the Mac (M4 R24).
+  # is gitignored; Task 11 raises both to the newest 12.x / 3.x on the Mac (M4 R24). GMA 12.3.0 is the first 12.x
+  # whose manifest admits UMP 3.x ("1.1.0"..<"4.0.0"); 12.0.0-12.2.0 cap UMP below 3.0.0 and cannot co-resolve.
   GoogleMobileAds:
     url: https://github.com/googleads/swift-package-manager-google-mobile-ads.git
-    exactVersion: "12.0.0"
+    exactVersion: "12.3.0"
   GoogleUserMessagingPlatform:
     url: https://github.com/googleads/swift-package-manager-google-user-messaging-platform.git
     exactVersion: "3.0.0"
