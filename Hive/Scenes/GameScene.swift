@@ -126,7 +126,8 @@ final class GameScene: SKScene {
     }
 
     /// Pays out an unfinished run abandoned from the pause menu (HOME or RETRY) as a loss, once per run. A downed
-    /// run abandoned this way would be a loss too (unreachable today: `pauseGame` guards `.playing`).
+    /// run abandoned this way would be a loss too (unreachable today: `pauseGame` guards `.playing`). It counts as a
+    /// run end but never triggers the consent flow: there is no results card to show it over.
     private func recordIfInProgress() {
         switch world.phase {
         case .playing, .pickingCards, .downed: break
@@ -134,7 +135,7 @@ final class GameScene: SKScene {
         }
         guard lastReportedRunID != world.runID else { return }
         lastReportedRunID = world.runID
-        flow.runEnded(flow.makeRunResult(world: world, mode: mode))
+        flow.runEnded(flow.makeRunResult(world: world, mode: mode), promptConsent: false)
     }
 
     private func startRun() {

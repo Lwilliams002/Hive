@@ -133,11 +133,13 @@ final class AppFlow {
     }
 
     /// Records the run once (idempotent by run id) and saves immediately when it counted. The first recorded story
-    /// run end also triggers the consent flow (R21) on the next run-loop turn, after `GameScene` has added the
-    /// `EndOverlay` in this same frame, so the prompts appear over the results card.
-    func runEnded(_ result: RunResult) {
+    /// run end that reaches the results card also triggers the consent flow (R21) on the next run-loop turn, after
+    /// `GameScene` has added the `EndOverlay` in this same frame, so the prompts appear over the results card. A run
+    /// quit from the pause menu is recorded and counted but passes `promptConsent: false`: no card is on screen and a
+    /// form over a live run would not pause it; the next story run's results card triggers the flow instead.
+    func runEnded(_ result: RunResult, promptConsent: Bool = true) {
         if state.record(result) { save() }
-        if AdRules.shouldPromptConsent(state, after: result) {
+        if promptConsent && AdRules.shouldPromptConsent(state, after: result) {
             state.consentPrompted = true
             save()
             DispatchQueue.main.async { [weak self] in self?.startAds() }
