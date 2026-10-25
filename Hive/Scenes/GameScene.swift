@@ -11,6 +11,7 @@ protocol Overlay: SKNode {
 extension CardPickOverlay: Overlay {}
 extension EndOverlay: Overlay {}
 extension PauseOverlay: Overlay {}
+extension ReviveOverlay: Overlay {}
 
 final class GameScene: SKScene {
     private unowned let flow: AppFlow
@@ -23,6 +24,8 @@ final class GameScene: SKScene {
     private let cardPool: [UpgradeCard]
     private let startingCardPool: [UpgradeCard]
     private let startingCardCount: Int
+    /// Cards still locked at this run's pool level; World rolls the premium slot from it (M4 R7, R8).
+    private let premiumPool: [UpgradeCard]
     /// The run whose result has already been reported; guards against double-recording.
     private var lastReportedRunID: UUID?
 
@@ -40,15 +43,21 @@ final class GameScene: SKScene {
     private var overlay: Overlay?
     /// Game-level pause (distinct from `SKNode.isPaused`, which would also stop overlay rendering/actions).
     private var isGamePaused = false
+    /// An ad owns the screen (M4): the current overlay stays up and `touchesBegan` is inert until the ad's `onDismiss`
+    /// clears it. Set before every `flow.showRewarded` / interstitial call, since `onDismiss` may run synchronously.
+    private var awaitingAd = false
 
     convenience init(level: LevelDefinition, levelId: Int, stats: HiveStats, cardPool: [UpgradeCard],
-                     startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
+                     startingCardPool: [UpgradeCard], startingCardCount: Int, premiumPool: [UpgradeCard],
+                     flow: AppFlow, size: CGSize) {
         self.init(mode: .story(levelId: levelId), provider: .fixed(level), stats: stats, cardPool: cardPool,
-                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, flow: flow, size: size)
+                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, premiumPool: premiumPool,
+                  flow: flow, size: size)
     }
 
     init(mode: RunMode, provider: WaveProvider, stats: HiveStats, cardPool: [UpgradeCard],
-         startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
+         startingCardPool: [UpgradeCard], startingCardCount: Int, premiumPool: [UpgradeCard], flow: AppFlow,
+         size: CGSize) {
         self.mode = mode
         self.provider = provider
         self.previousBest = flow.state.bestEndlessWave
@@ -56,6 +65,7 @@ final class GameScene: SKScene {
         self.cardPool = cardPool
         self.startingCardPool = startingCardPool
         self.startingCardCount = startingCardCount
+        self.premiumPool = premiumPool
         self.flow = flow
         super.init(size: size)
     }
@@ -116,7 +126,8 @@ final class GameScene: SKScene {
     }
 
     /// Pays out an unfinished run abandoned from the pause menu (HOME or RETRY) as a loss, once per run. A downed
-    /// run abandoned this way would be a loss too (unreachable today: `pauseGame` guards `.playing`).
+    /// run abandoned this way would be a loss too (unreachable today: `pauseGame` guards `.playing`). It counts as a
+    /// run end but never triggers the consent flow: there is no results card to show it over.
     private func recordIfInProgress() {
         switch world.phase {
         case .playing, .pickingCards, .downed: break
@@ -124,7 +135,7 @@ final class GameScene: SKScene {
         }
         guard lastReportedRunID != world.runID else { return }
         lastReportedRunID = world.runID
-        flow.runEnded(flow.makeRunResult(world: world, mode: mode))
+        flow.runEnded(flow.makeRunResult(world: world, mode: mode), promptConsent: false)
     }
 
     private func startRun() {
@@ -143,9 +154,20 @@ final class GameScene: SKScene {
         overlay?.removeFromParent()
         overlay = nil
         isGamePaused = false
+        awaitingAd = false
+        // The hive may enter `.downed` instead of `.gameOver` only once the ad system is up (R3); whether an ad is
+        // actually loaded is checked at that moment in `presentOverlayIfNeeded`.
         world = World(provider: provider, hiveStats: stats, cardPool: cardPool,
                       startingCardPool: startingCardPool, startingCardCount: startingCardCount,
-                      seed: UInt64(Date().timeIntervalSince1970 * 1000))
+                      seed: UInt64(Date().timeIntervalSince1970 * 1000),
+                      reviveAllowed: flow.reviveAllowed, premiumPool: premiumPool)
+        #if DEBUG
+        // `HIVE_START_HP=N` (DEBUG builds only): the hive starts the run at N hp, clamped to max; `0` downs it on the
+        // first ticking frame, before wave 1's delay elapses (Task 11's revive-and-clear walkthrough).
+        if let raw = ProcessInfo.processInfo.environment["HIVE_START_HP"], let hp = Double(raw) {
+            world.debugSetHiveHP(hp)
+        }
+        #endif
         lastUpdate = nil
         showStartingCards(world.startingCards)
     }
@@ -202,6 +224,8 @@ final class GameScene: SKScene {
     #endif
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // An ad owns the screen: no overlay taps, no pause (the ad's `onDismiss` clears the flag).
+        guard !awaitingAd else { return }
         guard let touch = touches.first else { return }
         if let overlay = overlay {
             overlay.handleTouch(at: touch.location(in: overlay))
@@ -226,16 +250,32 @@ final class GameScene: SKScene {
         case .playing:
             break
         case .pickingCards(let cards):
-            let o = CardPickOverlay(cards: cards, viewSize: size) { [weak self] card in
-                guard let self = self else { return }
-                self.world.choose(card)
-                self.overlay = nil
-            }
+            // The fourth row only while a rewarded ad is ready now (R11); the offer itself lives in World, so a rebuilt
+            // overlay would show the same rows and a cancelled ad leaves them as they were.
+            let premium = flow.rewardedReady ? world.premiumOffer : nil
+            let o = CardPickOverlay(cards: cards, premium: premium, viewSize: size,
+                                    onPick: { [weak self] card in
+                                        guard let self = self else { return }
+                                        self.world.choose(card)
+                                        self.overlay = nil
+                                    },
+                                    onPremium: premium == nil ? nil : { [weak self] card in
+                                        self?.watchPremiumAd(card)
+                                    })
             overlay = o
             addChild(o)
         case .downed:
-            // Task 7 replaces this with ReviveOverlay; until then a downed hive falls at once.
-            world.abandonRevive()
+            // No rewarded ad loaded: the hive falls at once, never a broken prompt (R3, R25); the next frame's
+            // terminal arm records the loss. Nothing is recorded here: a revived run keeps playing on the same runID.
+            guard flow.rewardedReady else {
+                world.abandonRevive()
+                return
+            }
+            let o = ReviveOverlay(viewSize: size,
+                                  onRevive: { [weak self] in self?.watchReviveAd() },
+                                  onGiveUp: { [weak self] in self?.giveUpRevive() })
+            overlay = o
+            addChild(o)
         case .cleared, .gameOver:
             guard lastReportedRunID != world.runID else { return }
             lastReportedRunID = world.runID
@@ -245,14 +285,112 @@ final class GameScene: SKScene {
             if case .story(let levelId) = mode {
                 let nextId = levelId + 1
                 if flow.levels.availableLevelIDs().contains(nextId) {
-                    onContinue = { [weak self] in self?.flow.startLevel(id: nextId) }
+                    onContinue = { [weak self] in self?.leaveRun { self?.flow.startLevel(id: nextId) } }
                 }
             }
+            // DOUBLE COINS only when a rewarded ad is ready now and the run pays out: a story clear or any endless end
+            // (R19), never a story loss. `coinsEarned` is 0 for an endless death before wave 1, which the core's bonus
+            // ledger would refuse anyway, so the button is never shown broken (R25).
+            let offerDouble = flow.rewardedReady && (result.cleared || result.mode == .endless) && result.coinsEarned > 0
+            // The three exits are the only interstitial decision points (R12, R13): the run is recorded above, the
+            // ad (if the 3 / 3 / 90 s rule permits one) runs between the card and the next screen, never over the
+            // card and never from the pause menu, which quits a run rather than ending it.
             let o = EndOverlay(result: result, previousBest: previousBest, viewSize: size, onContinue: onContinue,
-                               onRetry: { [weak self] in self?.startRun() },
-                               onHome: { [weak self] in self?.flow.showHome() })
+                               onRetry: { [weak self] in self?.leaveRun { self?.startRun() } },
+                               onHome: { [weak self] in self?.leaveRun { self?.flow.showHome() } },
+                               onDoubleCoins: offerDouble ? { [weak self] in self?.watchDoubleCoinsAd(result) } : nil)
             overlay = o
             addChild(o)
+        }
+    }
+
+    /// REVIVE: shows the rewarded ad and applies the outcome on **dismiss**, not on grant, so play never resumes under
+    /// the ad's end card. The pending state is set before the call because `onDismiss` may run synchronously (fake
+    /// provider, or no ad ready after all); the dismiss re-checks the overlay, run and phase it started from.
+    private func watchReviveAd() {
+        guard let o = overlay as? ReviveOverlay, !awaitingAd else { return }
+        let runID = world.runID
+        var granted = false
+        awaitingAd = true
+        o.setWaiting()
+        flow.showRewarded(onReward: { granted = true }, onDismiss: { [weak self] in
+            guard let self = self else { return }
+            self.awaitingAd = false
+            guard self.overlay === o, self.world.runID == runID, self.world.phase == .downed else { return }
+            if granted {
+                self.world.revive()
+            } else {
+                self.world.abandonRevive()
+            }
+            o.removeFromParent()
+            self.overlay = nil
+            self.lastUpdate = nil   // the first frame back ticks dt = 0
+        })
+    }
+
+    /// GIVE UP: the hive falls for good; the next frame's terminal arm records the loss once and shows HIVE FELL.
+    private func giveUpRevive() {
+        world.abandonRevive()
+        overlay?.removeFromParent()
+        overlay = nil
+    }
+
+    /// DOUBLE COINS: shows the rewarded ad and banks the bonus on **dismiss** (R20: bonus = `coinsEarned`, already
+    /// multiplied once in `makeRunResult`, never again). Idempotent three ways: the button is disabled while pending,
+    /// `touchesBegan` is inert while `awaitingAd`, and the core's bonus ledger refuses a second payout per run. The
+    /// pending state is set before the call because `onDismiss` may run synchronously.
+    private func watchDoubleCoinsAd(_ result: RunResult) {
+        guard let end = overlay as? EndOverlay, !awaitingAd else { return }
+        awaitingAd = true
+        end.setDoublePending()
+        var granted = false
+        flow.showRewarded(onReward: { granted = true }, onDismiss: { [weak self] in
+            guard let self = self else { return }
+            self.awaitingAd = false
+            guard self.overlay === end else { return }
+            if granted, self.flow.awardBonus(result) {
+                end.setDoubled(total: result.coinsEarned * 2)
+            } else {
+                // Cancelled or failed: the button returns only while another ad is ready, else it hides (R25).
+                end.setDoubleAvailable(self.flow.rewardedReady)
+            }
+        })
+    }
+
+    /// WATCH TO TAKE: shows the rewarded ad and consumes the pick with the locked card on **dismiss** (R6: through
+    /// `choose`, replacing the regular pick for this run only). The overlay has already dimmed its premium row and
+    /// stays up under the ad, so `presentOverlayIfNeeded` cannot rebuild it; on cancel or failure nothing else happens:
+    /// the same four rows stay, the premium row disabled, and a regular pick still works (R11). The pending state is
+    /// set before the call because `onDismiss` may run synchronously; the dismiss re-checks the overlay, run and phase.
+    private func watchPremiumAd(_ card: UpgradeCard) {
+        guard let pick = overlay as? CardPickOverlay, !awaitingAd, world.premiumOffer == card else { return }
+        let runID = world.runID
+        var granted = false
+        awaitingAd = true
+        flow.showRewarded(onReward: { granted = true }, onDismiss: { [weak self] in
+            guard let self = self else { return }
+            self.awaitingAd = false
+            guard self.overlay === pick, self.world.runID == runID,
+                  case .pickingCards = self.world.phase else { return }
+            if granted {
+                pick.finishPremiumPick()
+                self.overlay = nil
+                self.world.choose(card)
+            }
+        })
+    }
+
+    /// CONTINUE / RETRY / HOME on the results card: asks the flow for an interstitial and navigates in its
+    /// `onDismiss` (at once when none is permitted or loaded, also when the present fails). The flow consumes the
+    /// slot when it requests the show, so a failed present yields fewer ads, never more (R12). `awaitingAd` is set
+    /// before the call because the dismiss may run synchronously; while it is up `touchesBegan` is inert and the
+    /// `EndOverlay` stays under the ad (it is single-shot anyway, so a second tap would do nothing). The phase is
+    /// terminal here, so backgrounding under the ad never pauses (`pauseGame` guards `.playing`).
+    private func leaveRun(_ navigate: @escaping () -> Void) {
+        awaitingAd = true
+        flow.showInterstitialIfPermitted { [weak self] in
+            self?.awaitingAd = false
+            navigate()
         }
     }
 

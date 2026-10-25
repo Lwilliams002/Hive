@@ -18,7 +18,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         let skView = root.skView
         skView.frame = window.bounds
-        let flow = AppFlow(view: skView, store: FileSaveStore(directory: Self.saveDirectory()), levels: LevelLoader())
+        let flow = AppFlow(view: skView, store: FileSaveStore(directory: Self.saveDirectory()), levels: LevelLoader(),
+                           presenter: root, ads: Self.makeAdProvider())
         self.flow = flow
         flow.start()
     }
@@ -27,6 +28,21 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return support.appendingPathComponent("Hive", isDirectory: true)
+    }
+
+    /// The build's ad provider: the fake in a DEBUG run with `HIVE_FAKE_ADS` set, AdMob when both SDK packages
+    /// resolved, otherwise the inert fake (every placement hidden).
+    private static func makeAdProvider() -> AdProviding {
+        #if DEBUG
+        if let mode = NoAdsProvider.DebugMode(environment: ProcessInfo.processInfo.environment) {
+            return NoAdsProvider(debug: mode)
+        }
+        #endif
+        #if canImport(GoogleMobileAds) && canImport(UserMessagingPlatform)
+        return AdMobProvider(ids: AdUnitIDs.load())
+        #else
+        return NoAdsProvider()
+        #endif
     }
 }
 

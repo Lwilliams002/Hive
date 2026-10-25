@@ -10,7 +10,7 @@ Run the logic tests:
 cd HiveCore && swift test
 ```
 
-Build the app for the simulator:
+Build the app for the simulator (the first `xcodegen generate`/build resolves GoogleMobileAds and GoogleUserMessagingPlatform and needs network access):
 
 ```
 xcodegen generate && xcodebuild -project Hive.xcodeproj -scheme Hive -destination 'platform=iOS Simulator,id=2B4C8064-73B0-48D3-8246-1CA9711ED4D3' -derivedDataPath build build 2>&1 | tail -5
@@ -139,9 +139,36 @@ Overrides (`LevelCurveOverrides`; levels sitting on a difficulty cliff):
 - UPGRADES: spend coins on the five permanent tracks with a live hive preview.
 - Results (after a run): CONTINUE (only after a clear, and only if the next level exists), RETRY, HOME. Coins are awarded when the run ends.
 
+## Ads
+
+Google AdMob, four placements, no banner anywhere. Every rule that can be stated without the SDK lives in `HiveCore` (`AdRules`, `GameState`, `World`); the app's `AdProviding` (`AdMobProvider` on Google Mobile Ads v12 + UMP v3, `NoAdsProvider` otherwise) is owned by `AppFlow`, and scenes only ask it whether an ad is ready. A control whose ad is not loaded is hidden, never shown broken.
+
+| Placement | Type | Trigger | Rule |
+| --- | --- | --- | --- |
+| Revive | rewarded | hive HP hits zero while the ad system is up and a rewarded ad is loaded | Once per run. THE HIVE IS FALLING offers REVIVE (watch, then the hive is rebuilt at 50% HP, bosses wait at least 1.5 s, non-boss mobs within 150 pt are pushed back out) or GIVE UP. With no ad loaded the run simply ends. A second fall ends the run at once; a revived clear counts. |
+| Double coins | rewarded | results card after a story clear or any endless end (never a story loss) with coins earned and a rewarded ad loaded | Pays the card's `+N coins` a second time, once per run (`bonusAwardedRunIDs`); the button then reads DOUBLED. A cancelled ad brings the button back only while another ad is ready. |
+| Premium card | rewarded | a card pick, on about 1 in 3 picks | A fourth row, WATCH TO TAKE, with a card still locked at this level (story level L: `unlockLevel > L - 1`, so level 1 offers the four epics; endless: locked above `highestClearedLevel`; none from 15, so the row never appears). Taking it replaces the regular pick, for this run only. Rolled on its own RNG stream, so the three regular cards are unchanged; the row is omitted when no rewarded ad is loaded, and a cancelled ad leaves the same four rows with the fourth dimmed. |
+| Interstitial | interstitial | CONTINUE, RETRY or HOME on the results card | Shown between the card and the next screen when `AdRules` permits; never over the card, never during play, never from the pause menu's RETRY / HOME (those quit a run rather than end it). |
+
+Frequency (`AdRules` in `HiveCore/Sources/HiveCore/Progression/AdRules.swift`, unit-tested on Linux): an interstitial needs `levelsEnded > 3` (the first three run ends of a fresh install are ad-free), at least 3 run ends since the last interstitial, and no rewarded ad within the last 90 s (a clock set backwards counts as still inside the cooldown). `levelsEnded` counts every recorded run end: story clear, story loss, endless end and a run quit from the pause menu. The slot is consumed when the show is requested, so a failed present means fewer ads, never more.
+
+Consent runs once, after the first story run ends (any outcome), over that run's results card (a run quit from the pause menu does not trigger it), never on launch: UMP consent form (when required), then the App Tracking Transparency prompt (when not yet answered), then `MobileAds.shared.start`, then preload. No ad loads before it. The app is tagged not child-directed and not under the age of consent, max ad content rating T. `consentPrompted` in the save remembers that the flow ran; later launches start the SDK directly (UMP re-prompts on its own when it must).
+
+IDs: DEBUG builds always use Google's test IDs (App ID `ca-app-pub-3940256099942544~1458002511` in `Info.plist`, rewarded `ca-app-pub-3940256099942544/1712485313`, interstitial `ca-app-pub-3940256099942544/4411468910`). Release builds read `Hive/Resources/AdConfig.plist` (gitignored; keys `RewardedAdUnitID` and `InterstitialAdUnitID`) and fall back to the test IDs when the file or a key is missing; real IDs are milestone 5.
+
+DEBUG hooks (environment variables; with `xcrun simctl launch` they take the `SIMCTL_CHILD_` prefix, e.g. `SIMCTL_CHILD_HIVE_FAKE_ADS=grant xcrun simctl launch booted com.lwilliams.hive`):
+
+| Variable | Effect |
+| --- | --- |
+| `HIVE_FAKE_ADS=grant` or `cancel` | No SDK: the fake provider starts at the consent trigger like the real one, every placement then reads as ready, and a fake ad lasts 0.5 s and grants the reward (`grant`) or not (`cancel`). |
+| `HIVE_UMP_DEBUG_EEA=1` | Forces the EEA consent form on the simulator (AdMob build). |
+| `HIVE_START_HP=<hp>` | The run starts at that HP (clamped to max); `0` downs the hive on the first frame, which is the revive-and-clear check. |
+
+Save fields added for ads (all optional on decode; the save `version` stays 1): `levelsEnded`, `lastInterstitialAtLevelsEnded`, `lastRewardedAdAt` (unix seconds, or null), `consentPrompted`, `bonusAwardedRunIDs`.
+
 ## Save file
 
-Progress (coins, upgrade tiers, highest cleared level) is stored as `save.json` in the app's Application Support directory under `Hive/` (`Library/Application Support/Hive/save.json` in the app container). It is written after every purchase and every counted run. If the file cannot be decoded (or is from a newer version), it is moved aside to a backup next to it and the game starts from a fresh save.
+Progress (coins, upgrade tiers, highest cleared level) is stored as `save.json` in the app's Application Support directory under `Hive/` (`Library/Application Support/Hive/save.json` in the app container). It is written after every purchase and every counted run, and after every ad reward, interstitial and the consent prompt. If the file cannot be decoded (or is from a newer version), it is moved aside to a backup next to it and the game starts from a fresh save.
 
 ## Permanent upgrades
 

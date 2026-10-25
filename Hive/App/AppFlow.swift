@@ -1,17 +1,27 @@
 import SpriteKit
+import UIKit
 import HiveCore
 
-/// Owns the persistent game state and moves between scenes.
+/// Owns the persistent game state and the ad provider, and moves between scenes. The only app file that reads the
+/// wall clock or calls `ads.show*`; scenes read ad availability through `reviveAllowed` / `rewardedReady` (M4 R27).
 final class AppFlow {
     let view: SKView
     let levels: LevelLoader
+    /// `RootViewController`: what ads and the consent prompts are presented from (R22).
+    let presenter: UIViewController
+    let ads: AdProviding
     private let store: SaveStore
     private(set) var state = GameState()
+    /// True once `ads.start` completed successfully; every ad gate and `reviveAllowed` hang off it.
+    private(set) var adsStarted = false
+    private var adsStarting = false
 
-    init(view: SKView, store: SaveStore, levels: LevelLoader) {
+    init(view: SKView, store: SaveStore, levels: LevelLoader, presenter: UIViewController, ads: AdProviding) {
         self.view = view
         self.store = store
         self.levels = levels
+        self.presenter = presenter
+        self.ads = ads
     }
 
     /// The level PLAY starts: the next uncleared level, capped at the highest level that ships.
@@ -27,6 +37,11 @@ final class AppFlow {
         } catch {
             print("Hive: save unreadable, starting fresh: \(error)")
             state = GameState()
+        }
+        // Consent already ran once: start the SDK (UMP re-prompts only if it must). Deferred one turn because the
+        // root view is not yet in the window during `willConnectTo`.
+        if state.consentPrompted {
+            DispatchQueue.main.async { [weak self] in self?.startAds() }
         }
         #if DEBUG
         // Screenshot hook: open a screen directly on devices where taps cannot be scripted.
@@ -52,6 +67,9 @@ final class AppFlow {
     }
 
     func startLevel(id: Int) {
+        // The one re-arm point a run can reach after a failed load (every show is gated on readiness); a no-op
+        // while a load is in flight.
+        if adsStarted { ads.preload() }
         guard let level = try? levels.load(id: id) else {
             showHome()
             return
@@ -59,27 +77,33 @@ final class AppFlow {
         // Level 1 keeps the hand-tuned milestone 1 pool; later levels offer what the level-curve probes assume.
         let pool = id == 1 ? UpgradeCatalog.milestone1 : UpgradeCatalog.pool(unlockedThrough: id - 1)
         let startingPool = Self.startingPool(from: pool)
+        // The premium slot draws from what is still locked at this level: level 1 offers the four epics (R8).
         let scene = GameScene(level: level, levelId: id,
                               stats: state.upgrades.hiveStats(),
                               cardPool: pool,
                               startingCardPool: startingPool,
                               startingCardCount: state.upgrades.startingCardCount,
+                              premiumPool: UpgradeCatalog.locked(unlockedThrough: id - 1),
                               flow: self, size: view.bounds.size)
         present(scene)
     }
 
     func startEndless() {
+        if adsStarted { ads.preload() }
         guard state.endlessUnlocked else {
             showHome()
             return
         }
         let pool = UpgradeCatalog.pool(unlockedThrough: state.highestClearedLevel)
         let startingPool = Self.startingPool(from: pool)
+        // Endless always has a pool level of at least 10, so at most `royal_guard` is locked; empty from 15, which
+        // hides the slot (R9).
         let scene = GameScene(mode: .endless, provider: .endless(EndlessConfig()),
                               stats: state.upgrades.hiveStats(),
                               cardPool: pool,
                               startingCardPool: startingPool,
                               startingCardCount: state.upgrades.startingCardCount,
+                              premiumPool: UpgradeCatalog.locked(unlockedThrough: state.highestClearedLevel),
                               flow: self, size: view.bounds.size)
         present(scene)
     }
@@ -108,9 +132,18 @@ final class AppFlow {
                          revived: world.reviveUsed)
     }
 
-    /// Records the run once (idempotent by run id) and saves immediately when it counted.
-    func runEnded(_ result: RunResult) {
+    /// Records the run once (idempotent by run id) and saves immediately when it counted. The first recorded story
+    /// run end that reaches the results card also triggers the consent flow (R21) on the next run-loop turn, after
+    /// `GameScene` has added the `EndOverlay` in this same frame, so the prompts appear over the results card. A run
+    /// quit from the pause menu is recorded and counted but passes `promptConsent: false`: no card is on screen and a
+    /// form over a live run would not pause it; the next story run's results card triggers the flow instead.
+    func runEnded(_ result: RunResult, promptConsent: Bool = true) {
         if state.record(result) { save() }
+        if promptConsent && AdRules.shouldPromptConsent(state, after: result) {
+            state.consentPrompted = true
+            save()
+            DispatchQueue.main.async { [weak self] in self?.startAds() }
+        }
     }
 
     @discardableResult
@@ -118,6 +151,63 @@ final class AppFlow {
         guard state.purchase(track) else { return false }
         save()
         return true
+    }
+
+    // MARK: Ads (M4)
+
+    /// Runs the provider's consent → ATT → SDK start chain once; the provider preloads itself on success.
+    func startAds() {
+        guard !adsStarted, !adsStarting else { return }
+        adsStarting = true
+        ads.start(from: presenter) { [weak self] ok in
+            self?.adsStarting = false
+            self?.adsStarted = ok
+        }
+    }
+
+    /// World may enter `.downed` instead of `.gameOver` only once the ad system is up (R3); whether an ad is
+    /// actually loaded is checked at that moment through `rewardedReady`.
+    var reviveAllowed: Bool { adsStarted }
+
+    /// A rewarded ad can be presented right now; overlays add their rewarded controls only when this is true (R25).
+    var rewardedReady: Bool { adsStarted && ads.isRewardedReady }
+
+    /// Presents the loaded rewarded ad. `onDismiss` runs exactly once, after `onReward` if granted — at once when
+    /// no ad is ready. The 90 s interstitial cooldown starts whenever a rewarded ad was actually shown, granted or not.
+    func showRewarded(onReward: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+        guard rewardedReady else {
+            onDismiss()
+            return
+        }
+        ads.showRewarded(from: presenter, onReward: onReward, onDismiss: { [weak self] in
+            if let self = self {
+                AdRules.noteRewardedShown(&self.state, now: Date().timeIntervalSince1970)
+                self.save()
+            }
+            onDismiss()
+        })
+    }
+
+    /// True when an interstitial is loaded and the 3 / 3 / 90 s rule allows one (R12–R14).
+    func interstitialPermitted(now: TimeInterval) -> Bool {
+        adsStarted && ads.isInterstitialReady && AdRules.mayShowInterstitial(state, now: now)
+    }
+
+    /// Shows an interstitial when permitted and navigates on its dismiss; navigates at once otherwise. The slot is
+    /// consumed when the show is requested, so a failed present yields fewer ads, never more (R12).
+    func showInterstitialIfPermitted(then navigate: @escaping () -> Void) {
+        guard interstitialPermitted(now: Date().timeIntervalSince1970) else { return navigate() }
+        AdRules.noteInterstitialShown(&state)
+        save()
+        ads.showInterstitial(from: presenter, onDismiss: navigate)
+    }
+
+    /// Pays the double-coins bonus for a recorded run once (R20) and saves when it counted.
+    @discardableResult
+    func awardBonus(_ result: RunResult) -> Bool {
+        let ok = state.awardBonus(runID: result.runID, coins: result.coinsEarned)
+        if ok { save() }
+        return ok
     }
 
     private func save() {
