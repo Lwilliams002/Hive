@@ -71,4 +71,75 @@ final class GameStateTests: XCTestCase {
         XCTAssertEqual(s.recordedRunIDs.count, 20)
         XCTAssertEqual(s.recordedRunIDs, Array(ids.suffix(20)))
     }
+
+    // MARK: - M4 (Task 5): levelsEnded counter and awardBonus ledger
+
+    func testRecordIncrementsLevelsEndedOnce() {
+        var s = GameState()
+        XCTAssertEqual(s.levelsEnded, 0)
+        let r = result(level: 1)
+        XCTAssertTrue(s.record(r))
+        XCTAssertEqual(s.levelsEnded, 1)
+        XCTAssertFalse(s.record(r))
+        XCTAssertEqual(s.levelsEnded, 1)
+        XCTAssertTrue(s.record(result(level: 2, cleared: false, coins: 20)))
+        XCTAssertEqual(s.levelsEnded, 2)
+    }
+
+    func testEndlessEndCountsAsLevelEnd() {
+        var s = GameState()
+        let r = RunResult.endless(runID: UUID(), wavesCleared: 3, coinsEarned: 10)
+        XCTAssertTrue(s.record(r))
+        XCTAssertEqual(s.levelsEnded, 1)
+        XCTAssertFalse(s.record(r))
+        XCTAssertEqual(s.levelsEnded, 1)
+    }
+
+    func testAwardBonusAddsCoinsOnce() {
+        var s = GameState()
+        let id = UUID()
+        XCTAssertTrue(s.record(result(level: 1, coins: 80, id: id)))
+        let recordedBefore = s.recordedRunIDs
+        XCTAssertTrue(s.awardBonus(runID: id, coins: 80))
+        XCTAssertEqual(s.coins, 160)
+        XCTAssertEqual(s.bonusAwardedRunIDs, [id])
+        XCTAssertEqual(s.recordedRunIDs, recordedBefore)
+        XCTAssertFalse(s.awardBonus(runID: id, coins: 80))
+        XCTAssertEqual(s.coins, 160)
+        XCTAssertEqual(s.bonusAwardedRunIDs, [id])
+        XCTAssertEqual(s.recordedRunIDs, recordedBefore)
+    }
+
+    func testAwardBonusRequiresRecordedRun() {
+        var s = GameState()
+        XCTAssertTrue(s.record(result(level: 1, coins: 80)))
+        let before = s
+        XCTAssertFalse(s.awardBonus(runID: UUID(), coins: 80))
+        XCTAssertEqual(s.coins, 80)
+        XCTAssertEqual(s.bonusAwardedRunIDs, [])
+        XCTAssertEqual(s, before)
+    }
+
+    func testAwardBonusRefusesZeroCoins() {
+        var s = GameState()
+        let id = UUID()
+        XCTAssertTrue(s.record(RunResult.endless(runID: id, wavesCleared: 0, coinsEarned: 0)))
+        XCTAssertFalse(s.awardBonus(runID: id, coins: 0))
+        XCTAssertEqual(s.coins, 0)
+        XCTAssertEqual(s.bonusAwardedRunIDs, [])
+    }
+
+    func testBonusRunIDsCappedAt20() {
+        var s = GameState()
+        var ids: [UUID] = []
+        for _ in 0..<25 {
+            let id = UUID(); ids.append(id)
+            XCTAssertTrue(s.record(result(level: 1, coins: 80, id: id)))
+            XCTAssertTrue(s.awardBonus(runID: id, coins: 80))
+        }
+        XCTAssertEqual(s.coins, 4000)
+        XCTAssertEqual(s.bonusAwardedRunIDs.count, 20)
+        XCTAssertEqual(s.bonusAwardedRunIDs, Array(ids.suffix(20)))
+        XCTAssertEqual(s.recordedRunIDs, Array(ids.suffix(20)))
+    }
 }

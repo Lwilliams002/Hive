@@ -46,5 +46,10 @@ final class GatingTests: XCTestCase {
         let s = try JSONDecoder().decode(GameState.self, from: Data(contentsOf: url))
         XCTAssertEqual(s.bestEndlessWave, 0)
         XCTAssertEqual(s.coins, 1234)
+        XCTAssertEqual(s.levelsEnded, 0)
+        XCTAssertEqual(s.lastInterstitialAtLevelsEnded, 0)
+        XCTAssertNil(s.lastRewardedAdAt)
+        XCTAssertFalse(s.consentPrompted)
+        XCTAssertEqual(s.bonusAwardedRunIDs, [])
     }
 }
