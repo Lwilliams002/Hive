@@ -284,16 +284,19 @@ final class GameScene: SKScene {
             if case .story(let levelId) = mode {
                 let nextId = levelId + 1
                 if flow.levels.availableLevelIDs().contains(nextId) {
-                    onContinue = { [weak self] in self?.flow.startLevel(id: nextId) }
+                    onContinue = { [weak self] in self?.leaveRun { self?.flow.startLevel(id: nextId) } }
                 }
             }
             // DOUBLE COINS only when a rewarded ad is ready now and the run pays out: a story clear or any endless end
             // (R19), never a story loss. `coinsEarned` is 0 for an endless death before wave 1, which the core's bonus
             // ledger would refuse anyway, so the button is never shown broken (R25).
             let offerDouble = flow.rewardedReady && (result.cleared || result.mode == .endless) && result.coinsEarned > 0
+            // The three exits are the only interstitial decision points (R12, R13): the run is recorded above, the
+            // ad (if the 3 / 3 / 90 s rule permits one) runs between the card and the next screen, never over the
+            // card and never from the pause menu, which quits a run rather than ending it.
             let o = EndOverlay(result: result, previousBest: previousBest, viewSize: size, onContinue: onContinue,
-                               onRetry: { [weak self] in self?.startRun() },
-                               onHome: { [weak self] in self?.flow.showHome() },
+                               onRetry: { [weak self] in self?.leaveRun { self?.startRun() } },
+                               onHome: { [weak self] in self?.leaveRun { self?.flow.showHome() } },
                                onDoubleCoins: offerDouble ? { [weak self] in self?.watchDoubleCoinsAd(result) } : nil)
             overlay = o
             addChild(o)
@@ -374,6 +377,20 @@ final class GameScene: SKScene {
                 self.world.choose(card)
             }
         })
+    }
+
+    /// CONTINUE / RETRY / HOME on the results card: asks the flow for an interstitial and navigates in its
+    /// `onDismiss` (at once when none is permitted or loaded, also when the present fails). The flow consumes the
+    /// slot when it requests the show, so a failed present yields fewer ads, never more (R12). `awaitingAd` is set
+    /// before the call because the dismiss may run synchronously; while it is up `touchesBegan` is inert and the
+    /// `EndOverlay` stays under the ad (it is single-shot anyway, so a second tap would do nothing). The phase is
+    /// terminal here, so backgrounding under the ad never pauses (`pauseGame` guards `.playing`).
+    private func leaveRun(_ navigate: @escaping () -> Void) {
+        awaitingAd = true
+        flow.showInterstitialIfPermitted { [weak self] in
+            self?.awaitingAd = false
+            navigate()
+        }
     }
 
     override func update(_ currentTime: TimeInterval) {
