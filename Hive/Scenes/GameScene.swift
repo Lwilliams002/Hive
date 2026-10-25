@@ -24,6 +24,8 @@ final class GameScene: SKScene {
     private let cardPool: [UpgradeCard]
     private let startingCardPool: [UpgradeCard]
     private let startingCardCount: Int
+    /// Cards still locked at this run's pool level; World rolls the premium slot from it (M4 R7, R8).
+    private let premiumPool: [UpgradeCard]
     /// The run whose result has already been reported; guards against double-recording.
     private var lastReportedRunID: UUID?
 
@@ -46,13 +48,16 @@ final class GameScene: SKScene {
     private var awaitingAd = false
 
     convenience init(level: LevelDefinition, levelId: Int, stats: HiveStats, cardPool: [UpgradeCard],
-                     startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
+                     startingCardPool: [UpgradeCard], startingCardCount: Int, premiumPool: [UpgradeCard],
+                     flow: AppFlow, size: CGSize) {
         self.init(mode: .story(levelId: levelId), provider: .fixed(level), stats: stats, cardPool: cardPool,
-                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, flow: flow, size: size)
+                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, premiumPool: premiumPool,
+                  flow: flow, size: size)
     }
 
     init(mode: RunMode, provider: WaveProvider, stats: HiveStats, cardPool: [UpgradeCard],
-         startingCardPool: [UpgradeCard], startingCardCount: Int, flow: AppFlow, size: CGSize) {
+         startingCardPool: [UpgradeCard], startingCardCount: Int, premiumPool: [UpgradeCard], flow: AppFlow,
+         size: CGSize) {
         self.mode = mode
         self.provider = provider
         self.previousBest = flow.state.bestEndlessWave
@@ -60,6 +65,7 @@ final class GameScene: SKScene {
         self.cardPool = cardPool
         self.startingCardPool = startingCardPool
         self.startingCardCount = startingCardCount
+        self.premiumPool = premiumPool
         self.flow = flow
         super.init(size: size)
     }
@@ -153,7 +159,7 @@ final class GameScene: SKScene {
         world = World(provider: provider, hiveStats: stats, cardPool: cardPool,
                       startingCardPool: startingCardPool, startingCardCount: startingCardCount,
                       seed: UInt64(Date().timeIntervalSince1970 * 1000),
-                      reviveAllowed: flow.reviveAllowed)
+                      reviveAllowed: flow.reviveAllowed, premiumPool: premiumPool)
         #if DEBUG
         // `HIVE_START_HP=N` (DEBUG builds only): the hive starts the run at N hp, clamped to max; `0` downs it on the
         // first ticking frame, before wave 1's delay elapses (Task 11's revive-and-clear walkthrough).
@@ -243,11 +249,18 @@ final class GameScene: SKScene {
         case .playing:
             break
         case .pickingCards(let cards):
-            let o = CardPickOverlay(cards: cards, viewSize: size) { [weak self] card in
-                guard let self = self else { return }
-                self.world.choose(card)
-                self.overlay = nil
-            }
+            // The fourth row only while a rewarded ad is ready now (R11); the offer itself lives in World, so a rebuilt
+            // overlay would show the same rows and a cancelled ad leaves them as they were.
+            let premium = flow.rewardedReady ? world.premiumOffer : nil
+            let o = CardPickOverlay(cards: cards, premium: premium, viewSize: size,
+                                    onPick: { [weak self] card in
+                                        guard let self = self else { return }
+                                        self.world.choose(card)
+                                        self.overlay = nil
+                                    },
+                                    onPremium: premium == nil ? nil : { [weak self] card in
+                                        self?.watchPremiumAd(card)
+                                    })
             overlay = o
             addChild(o)
         case .downed:
@@ -336,6 +349,29 @@ final class GameScene: SKScene {
             } else {
                 // Cancelled or failed: the button returns only while another ad is ready, else it hides (R25).
                 end.setDoubleAvailable(self.flow.rewardedReady)
+            }
+        })
+    }
+
+    /// WATCH TO TAKE: shows the rewarded ad and consumes the pick with the locked card on **dismiss** (R6: through
+    /// `choose`, replacing the regular pick for this run only). The overlay has already dimmed its premium row and
+    /// stays up under the ad, so `presentOverlayIfNeeded` cannot rebuild it; on cancel or failure nothing else happens:
+    /// the same four rows stay, the premium row disabled, and a regular pick still works (R11). The pending state is
+    /// set before the call because `onDismiss` may run synchronously; the dismiss re-checks the overlay, run and phase.
+    private func watchPremiumAd(_ card: UpgradeCard) {
+        guard let pick = overlay as? CardPickOverlay, !awaitingAd, world.premiumOffer == card else { return }
+        let runID = world.runID
+        var granted = false
+        awaitingAd = true
+        flow.showRewarded(onReward: { granted = true }, onDismiss: { [weak self] in
+            guard let self = self else { return }
+            self.awaitingAd = false
+            guard self.overlay === pick, self.world.runID == runID,
+                  case .pickingCards = self.world.phase else { return }
+            if granted {
+                pick.finishPremiumPick()
+                self.overlay = nil
+                self.world.choose(card)
             }
         })
     }

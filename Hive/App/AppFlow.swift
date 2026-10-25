@@ -77,11 +77,13 @@ final class AppFlow {
         // Level 1 keeps the hand-tuned milestone 1 pool; later levels offer what the level-curve probes assume.
         let pool = id == 1 ? UpgradeCatalog.milestone1 : UpgradeCatalog.pool(unlockedThrough: id - 1)
         let startingPool = Self.startingPool(from: pool)
+        // The premium slot draws from what is still locked at this level: level 1 offers the four epics (R8).
         let scene = GameScene(level: level, levelId: id,
                               stats: state.upgrades.hiveStats(),
                               cardPool: pool,
                               startingCardPool: startingPool,
                               startingCardCount: state.upgrades.startingCardCount,
+                              premiumPool: UpgradeCatalog.locked(unlockedThrough: id - 1),
                               flow: self, size: view.bounds.size)
         present(scene)
     }
@@ -94,11 +96,14 @@ final class AppFlow {
         }
         let pool = UpgradeCatalog.pool(unlockedThrough: state.highestClearedLevel)
         let startingPool = Self.startingPool(from: pool)
+        // Endless always has a pool level of at least 10, so at most `royal_guard` is locked; empty from 15, which
+        // hides the slot (R9).
         let scene = GameScene(mode: .endless, provider: .endless(EndlessConfig()),
                               stats: state.upgrades.hiveStats(),
                               cardPool: pool,
                               startingCardPool: startingPool,
                               startingCardCount: state.upgrades.startingCardCount,
+                              premiumPool: UpgradeCatalog.locked(unlockedThrough: state.highestClearedLevel),
                               flow: self, size: view.bounds.size)
         present(scene)
     }
