@@ -93,7 +93,8 @@ final class AppFlow {
             let n = world.wavesCleared
             return RunResult.endless(runID: world.runID, wavesCleared: n,
                                      coinsEarned: CoinRules.endlessCoins(wavesCleared: n,
-                                                                         multiplier: state.upgrades.coinMultiplier))
+                                                                         multiplier: state.upgrades.coinMultiplier),
+                                     revived: world.reviveUsed)
         case .story(let id):
             levelId = id
         }
@@ -103,7 +104,8 @@ final class AppFlow {
         let coins = CoinRules.coins(levelId: levelId, wavesCleared: wavesCleared, cleared: cleared,
                                     multiplier: state.upgrades.coinMultiplier)
         return RunResult(runID: world.runID, levelId: levelId, cleared: cleared,
-                         wavesCleared: wavesCleared, totalWaves: totalWaves, coinsEarned: coins)
+                         wavesCleared: wavesCleared, totalWaves: totalWaves, coinsEarned: coins,
+                         revived: world.reviveUsed)
     }
 
     /// Records the run once (idempotent by run id) and saves immediately when it counted.

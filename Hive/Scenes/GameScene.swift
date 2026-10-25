@@ -115,10 +115,11 @@ final class GameScene: SKScene {
         addChild(o)
     }
 
-    /// Pays out an unfinished run abandoned from the pause menu (HOME or RETRY) as a loss, once per run.
+    /// Pays out an unfinished run abandoned from the pause menu (HOME or RETRY) as a loss, once per run. A downed
+    /// run abandoned this way would be a loss too (unreachable today: `pauseGame` guards `.playing`).
     private func recordIfInProgress() {
         switch world.phase {
-        case .playing, .pickingCards: break
+        case .playing, .pickingCards, .downed: break
         case .cleared, .gameOver: return
         }
         guard lastReportedRunID != world.runID else { return }
@@ -232,6 +233,9 @@ final class GameScene: SKScene {
             }
             overlay = o
             addChild(o)
+        case .downed:
+            // Task 7 replaces this with ReviveOverlay; until then a downed hive falls at once.
+            world.abandonRevive()
         case .cleared, .gameOver:
             guard lastReportedRunID != world.runID else { return }
             lastReportedRunID = world.runID

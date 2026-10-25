@@ -16,6 +16,11 @@ public struct World {
 
     public let runID: UUID
     public private(set) var startingCards: [UpgradeCard] = []
+    /// Whether the hive may be revived once this run (the app passes true once the ad system is started; R3).
+    /// False means the hive falls straight to `.gameOver`, so headless runs and probes never see `.downed`.
+    public private(set) var reviveAllowed: Bool
+    /// True once `revive()` has been used; a second fall goes straight to `.gameOver` (R2).
+    public private(set) var reviveUsed = false
 
     private let provider: WaveProvider
     public var isEndless: Bool { provider.isEndless }
@@ -39,22 +44,31 @@ public struct World {
     /// Escorts never spawn closer to the hive than this (≈1.5 s of hive fire before contact).
     static let escortMinDistance = 140.0
     static let escortJitterRadians = 15.0 * .pi / 180
+    /// Revive (R4): hp is restored to this fraction of max; bosses wait at least `reviveBossDelay` before their
+    /// next hit; non-boss mobs inside `reviveClearRadius` are pushed out to its edge.
+    static let reviveHPFraction = 0.5
+    static let reviveBossDelay = 1.5
+    static let reviveClearRadius = 150.0
 
     public init(level: LevelDefinition, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
-                startingCardCount: Int = 0, startingCardPool: [UpgradeCard]? = nil, seed: UInt64) {
+                startingCardCount: Int = 0, startingCardPool: [UpgradeCard]? = nil, seed: UInt64,
+                reviveAllowed: Bool = false) {
         self.init(provider: .fixed(level), hiveStats: hiveStats, cardPool: cardPool,
-                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, seed: seed)
+                  startingCardPool: startingCardPool, startingCardCount: startingCardCount, seed: seed,
+                  reviveAllowed: reviveAllowed)
     }
 
     public init(provider: WaveProvider, hiveStats: HiveStats = .base,
                 cardPool: [UpgradeCard] = UpgradeCatalog.milestone1,
-                startingCardPool: [UpgradeCard]? = nil, startingCardCount: Int = 0, seed: UInt64) {
+                startingCardPool: [UpgradeCard]? = nil, startingCardCount: Int = 0, seed: UInt64,
+                reviveAllowed: Bool = false) {
         self.provider = provider
         self.cardPool = cardPool
         self.runID = UUID()
         self.director = WaveDirector(provider: provider)
         self.hive = Hive(stats: hiveStats, hp: hiveStats.maxHP, cooldown: 0)
+        self.reviveAllowed = reviveAllowed
         self.rng = SeededRNG(seed: seed)
         let drawn = UpgradeCatalog.draw(count: startingCardCount, from: startingCardPool ?? cardPool, rng: &rng)
         for card in drawn { apply(card: card) }
@@ -184,10 +198,16 @@ public struct World {
         }
         mobs.removeAll { contacted.contains($0.id) }
 
-        // (9) game over
+        // (9) the hive fell: downed (awaiting the revive decision) while a revive is permitted and unused,
+        // otherwise game over. `.gameOver` is emitted exactly once per run, here or in `abandonRevive()` (R1, R2).
         if hive.hp <= 0 {
-            phase = .gameOver
-            events.append(.gameOver)
+            if reviveAllowed && !reviveUsed {
+                phase = .downed
+                events.append(.hiveDowned)
+            } else {
+                phase = .gameOver
+                events.append(.gameOver)
+            }
             return events
         }
 
@@ -234,6 +254,40 @@ public struct World {
         } else {
             phase = .playing
         }
+    }
+
+    /// Revives the downed hive (once per run, R4): hp is set to `reviveHPFraction` of max (set, not added — it is
+    /// negative), every boss waits at least `reviveBossDelay` before its next hit, every non-boss mob inside
+    /// `reviveClearRadius` is displaced (never removed: no kill, no nectar) to `reviveClearRadius + radius` along
+    /// its bearing from the hive (a mob exactly at the origin takes bearing 0), and play resumes with the same
+    /// `runID`. Projectiles, bees, `hive.cooldown`, nectar, `time` and escort timers are untouched; no rng, no
+    /// event (R2 names only `.hiveDowned` and `.gameOver`). Returns `[]`; a no-op outside `.downed`.
+    @discardableResult
+    public mutating func revive() -> [GameEvent] {
+        guard phase == .downed else { return [] }
+        reviveUsed = true
+        hive.hp = World.reviveHPFraction * hive.stats.maxHP
+        for i in mobs.indices {
+            let stats = mobs[i].type.stats
+            if stats.isBoss {
+                mobs[i].attackCooldown = max(mobs[i].attackCooldown, World.reviveBossDelay)
+            } else if mobs[i].position.length < World.reviveClearRadius {
+                let pos = mobs[i].position
+                let bearing = pos.length == 0 ? Vec2(1, 0) : pos.normalized
+                mobs[i].position = bearing * (World.reviveClearRadius + stats.radius)
+            }
+        }
+        phase = .playing
+        return []
+    }
+
+    /// Declines the revive: the downed hive falls for good, emitting the run's single `.gameOver` (R2).
+    /// A no-op (returns `[]`) outside `.downed`.
+    @discardableResult
+    public mutating func abandonRevive() -> [GameEvent] {
+        guard phase == .downed else { return [] }
+        phase = .gameOver
+        return [.gameOver]
     }
 
     private mutating func apply(card: UpgradeCard) {
@@ -322,6 +376,12 @@ public struct World {
             mobs.append(Mob(id: makeID(), type: type,
                             position: Vec2(cos(angle), sin(angle)) * World.spawnRadius, hpScale: hpScale))
         }
+    }
+
+    /// DEBUG-only start-HP hook for the app (`HIVE_START_HP`): sets the hive's hp, clamped to `maxHP`. `0` downs
+    /// the hive on the first ticking frame, since step (9) tests `hive.hp <= 0` unconditionally. Touches no rng.
+    public mutating func debugSetHiveHP(_ hp: Double) {
+        hive.hp = min(hp, hive.stats.maxHP)
     }
     #endif
 

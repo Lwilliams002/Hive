@@ -13,8 +13,12 @@ public struct RunResult: Equatable {
     public let totalWaves: Int
     public let coinsEarned: Int
     public let mode: RunMode
+    /// Whether the run used its one revive (mirrored from `World.reviveUsed`; M4 R5). Informational: a revived
+    /// clear counts like any other.
+    public let revived: Bool
 
-    public init(runID: UUID, levelId: Int, cleared: Bool, wavesCleared: Int, totalWaves: Int, coinsEarned: Int) {
+    public init(runID: UUID, levelId: Int, cleared: Bool, wavesCleared: Int, totalWaves: Int, coinsEarned: Int,
+                revived: Bool = false) {
         self.runID = runID
         self.levelId = levelId
         self.cleared = cleared
@@ -22,9 +26,10 @@ public struct RunResult: Equatable {
         self.totalWaves = totalWaves
         self.coinsEarned = coinsEarned
         self.mode = .story(levelId: levelId)
+        self.revived = revived
     }
 
-    private init(runID: UUID, endlessWavesCleared: Int, coinsEarned: Int) {
+    private init(runID: UUID, endlessWavesCleared: Int, coinsEarned: Int, revived: Bool) {
         self.runID = runID
         self.levelId = 0
         self.cleared = false
@@ -32,10 +37,11 @@ public struct RunResult: Equatable {
         self.totalWaves = 0
         self.coinsEarned = coinsEarned
         self.mode = .endless
+        self.revived = revived
     }
 
-    public static func endless(runID: UUID, wavesCleared: Int, coinsEarned: Int) -> RunResult {
-        RunResult(runID: runID, endlessWavesCleared: wavesCleared, coinsEarned: coinsEarned)
+    public static func endless(runID: UUID, wavesCleared: Int, coinsEarned: Int, revived: Bool = false) -> RunResult {
+        RunResult(runID: runID, endlessWavesCleared: wavesCleared, coinsEarned: coinsEarned, revived: revived)
     }
 }
 
